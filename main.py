@@ -2,7 +2,7 @@ import urllib.request
 import json
 from datetime import datetime, timedelta
 
-API_KEY = "demo"  # Replace with your Alpha Vantage API key for more frequent updates
+API_KEY = "9V0G4JNKUKQ56QSB"  # Your Alpha Vantage API key
 BASE_URL = "https://www.alphavantage.co/query"
 
 def fetch_gold_data():
