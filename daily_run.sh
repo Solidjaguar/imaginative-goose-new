@@ -1,22 +1,29 @@
 #!/bin/bash
 
-# Install required packages
-pip install yfinance pandas numpy scikit-learn matplotlib flask tensorflow nltk ta-lib requests alpha_vantage seaborn scipy
+# Set the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-# Run the prediction script hourly
-while true; do
-    python3 gold_forex_predictor.py
-    sleep 3600
-done &
+# Change to the script directory
+cd "$SCRIPT_DIR"
 
-# Run the paper trading script continuously
-python3 paper_trader.py &
+# Activate virtual environment if you're using one
+# source /path/to/your/venv/bin/activate
 
-# Run the model retrainer script
-python3 model_retrainer.py &
+# Set environment variables (replace with your actual API keys)
+export NEWS_API_KEY='your_news_api_key'
+export FRED_API_KEY='your_fred_api_key'
 
-# Run the advanced trading system
-python3 advanced_trading.py &
+# Run the main prediction script
+python3 ultra_advanced_gold_predictor.py
 
-# Run the web server
-python3 web_interface.py
+# Run the backtesting script
+python3 backtest.py
+
+# Log the completion of the daily run
+echo "Daily run completed at $(date)" >> daily_run_log.txt
+
+# Optionally, you can add commands to save or send the results
+# For example, you could email the results or push them to a repository
+
+# Deactivate virtual environment if you're using one
+# deactivate
