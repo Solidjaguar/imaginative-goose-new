@@ -1,13 +1,15 @@
 #!/bin/bash
 
-# Activate virtual environment
+# Activate the virtual environment
 source venv/bin/activate
 
-# Run the forex predictor script
+# Run the main prediction script
 python3 gold_forex_predictor.py
+
+# Run the backtesting script
+python3 backtester.py
 
 # Start the web server
 python3 web_interface.py &
 
-# Deactivate virtual environment
-deactivate
+echo "Daily run completed. Web server started in the background."

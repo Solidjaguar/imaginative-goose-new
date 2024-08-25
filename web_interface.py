@@ -68,6 +68,20 @@ def load_feature_importance():
     except FileNotFoundError:
         return None
 
+def load_backtest_results():
+    try:
+        with open('backtest_results.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+def load_backtest_plots():
+    try:
+        with open('backtest_plots.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
 @app.route('/')
 def index():
     predictions = load_predictions()
@@ -75,7 +89,11 @@ def index():
     metrics = calculate_metrics(predictions)
     cv_scores = load_cv_scores()
     feature_importance = load_feature_importance()
-    return render_template('index.html', predictions=predictions, plot_url=plot_url, metrics=metrics, cv_scores=cv_scores, feature_importance=feature_importance)
+    backtest_results = load_backtest_results()
+    backtest_plots = load_backtest_plots()
+    return render_template('index.html', predictions=predictions, plot_url=plot_url, metrics=metrics, 
+                           cv_scores=cv_scores, feature_importance=feature_importance, 
+                           backtest_results=backtest_results, backtest_plots=backtest_plots)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

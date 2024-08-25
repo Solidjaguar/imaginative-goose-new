@@ -77,6 +77,34 @@
     <img src="data:image/png;base64,{{ feature_importance }}" alt="Feature Importance Chart">
     {% endif %}
     
+    {% if backtest_results %}
+    <h2>Backtesting Results</h2>
+    <table>
+        <tr>
+            <th>Currency Pair</th>
+            <th>Mean Squared Error</th>
+            <th>Mean Absolute Error</th>
+            <th>R-squared</th>
+        </tr>
+        {% for result in backtest_results %}
+        <tr>
+            <td>{{ result.currency_pair }}</td>
+            <td>{{ "%.6f"|format(result.mse) }}</td>
+            <td>{{ "%.6f"|format(result.mae) }}</td>
+            <td>{{ "%.6f"|format(result.r2) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    
+    {% if backtest_plots %}
+    <h2>Backtesting Plots</h2>
+    {% for currency_pair, plot in backtest_plots.items() %}
+    <h3>{{ currency_pair }}</h3>
+    <img src="data:image/png;base64,{{ plot }}" alt="Backtest Plot for {{ currency_pair }}">
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+    
     <h2>Latest Predictions</h2>
     <table>
         <tr>
