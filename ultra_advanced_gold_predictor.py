@@ -38,54 +38,31 @@ import sqlite3
 
 # ... (previous code remains unchanged)
 
-def create_prediction_database():
-    """Create a SQLite database to store predictions."""
+def analyze_past_predictions(window_days=365):
+    """Analyze past predictions to improve the model, using a moving window."""
     conn = sqlite3.connect('predictions.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS predictions
-                 (date TEXT, predicted_price REAL, actual_price REAL, error REAL)''')
-    conn.commit()
-    conn.close()
-
-def store_prediction(date, predicted_price, actual_price=None):
-    """Store a prediction in the database."""
-    conn = sqlite3.connect('predictions.db')
-    c = conn.cursor()
-    error = None
-    if actual_price is not None:
-        error = actual_price - predicted_price
-    c.execute("INSERT INTO predictions VALUES (?, ?, ?, ?)", (date, predicted_price, actual_price, error))
-    conn.commit()
-    conn.close()
-
-def update_past_predictions(current_date):
-    """Update past predictions with actual prices."""
-    conn = sqlite3.connect('predictions.db')
-    c = conn.cursor()
-    c.execute("SELECT date FROM predictions WHERE actual_price IS NULL")
-    dates_to_update = c.fetchall()
-    for date in dates_to_update:
-        date = date[0]
-        if datetime.strptime(date, "%Y-%m-%d") < datetime.strptime(current_date, "%Y-%m-%d"):
-            actual_price = fetch_actual_price(date)  # You need to implement this function
-            predicted_price = c.execute("SELECT predicted_price FROM predictions WHERE date=?", (date,)).fetchone()[0]
-            error = actual_price - predicted_price
-            c.execute("UPDATE predictions SET actual_price=?, error=? WHERE date=?", (actual_price, error, date))
-    conn.commit()
-    conn.close()
-
-def analyze_past_predictions():
-    """Analyze past predictions to improve the model."""
-    conn = sqlite3.connect('predictions.db')
-    df = pd.read_sql_query("SELECT * FROM predictions WHERE actual_price IS NOT NULL", conn)
+    current_date = datetime.now().date()
+    window_start = current_date - timedelta(days=window_days)
+    
+    query = f"""
+    SELECT * FROM predictions 
+    WHERE actual_price IS NOT NULL 
+    AND date >= '{window_start}'
+    ORDER BY date DESC
+    """
+    
+    df = pd.read_sql_query(query, conn)
     conn.close()
     
     if len(df) > 0:
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        
         mse = mean_squared_error(df['actual_price'], df['predicted_price'])
         mae = mean_absolute_error(df['actual_price'], df['predicted_price'])
         r2 = r2_score(df['actual_price'], df['predicted_price'])
         
-        print(f"Historical Model Performance:")
+        print(f"Historical Model Performance (Last {window_days} days):")
         print(f"MSE: {mse:.4f}")
         print(f"MAE: {mae:.4f}")
         print(f"R2 Score: {r2:.4f}")
@@ -94,60 +71,46 @@ def analyze_past_predictions():
         df['error'] = df['actual_price'] - df['predicted_price']
         plt.figure(figsize=(10, 6))
         plt.plot(df['date'], df['error'])
-        plt.title("Prediction Error Over Time")
+        plt.title(f"Prediction Error Over Time (Last {window_days} days)")
         plt.xlabel("Date")
         plt.ylabel("Error")
         plt.show()
-        
-        # You can add more sophisticated analysis here, such as:
-        # - Checking for autocorrelation in errors
-        # - Identifying periods of consistent over/under-prediction
-        # - Analyzing error distribution
         
         return df
     else:
         print("No historical predictions available for analysis.")
         return None
 
-def adjust_model_based_on_history(model, historical_data):
-    """Adjust the model based on historical prediction performance."""
+def adjust_model_based_on_history(model, historical_data, max_adjustment_percent=5):
+    """Adjust the model based on historical prediction performance with safeguards."""
     if historical_data is not None and len(historical_data) > 0:
-        # Here you can implement logic to adjust the model based on past performance
-        # For example:
-        # - If the model consistently underpredicts, you might add a small positive bias
-        # - If errors are autocorrelated, you might need to adjust your feature engineering
-        # - You could use the historical errors to create new features for your model
+        # Calculate weighted mean error with exponential decay
+        days = (datetime.now().date() - historical_data['date'].min().date()).days
+        weights = np.exp(-np.arange(len(historical_data)) / (days / 2))  # Half-life of half the period
+        weighted_mean_error = np.average(historical_data['error'], weights=weights)
         
-        # This is a simple example that adjusts the predictions by the mean historical error
-        mean_error = historical_data['error'].mean()
+        # Cap the adjustment
+        max_adjustment = np.mean(historical_data['actual_price']) * (max_adjustment_percent / 100)
+        capped_adjustment = np.clip(weighted_mean_error, -max_adjustment, max_adjustment)
+        
+        print(f"Applied adjustment: {capped_adjustment:.4f}")
         
         def adjusted_predict(X):
             original_prediction = model.predict(X)
-            return original_prediction + mean_error
+            return original_prediction + capped_adjustment
         
         return adjusted_predict
     else:
         return model.predict
 
 if __name__ == "__main__":
-    # Create prediction database
-    create_prediction_database()
-    
     # ... (previous main code)
     
-    # After making predictions
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    for date, pred in zip(test_df.index, predictions):
-        store_prediction(date.strftime("%Y-%m-%d"), pred)
+    # Analyze past predictions with a 365-day window
+    historical_data = analyze_past_predictions(window_days=365)
     
-    # Update past predictions with actual prices
-    update_past_predictions(current_date)
-    
-    # Analyze past predictions
-    historical_data = analyze_past_predictions()
-    
-    # Adjust model based on historical performance
-    adjusted_predict = adjust_model_based_on_history(stacking_model, historical_data)
+    # Adjust model based on historical performance, with a 5% max adjustment
+    adjusted_predict = adjust_model_based_on_history(stacking_model, historical_data, max_adjustment_percent=5)
     
     # Make new predictions using the adjusted model
     adjusted_predictions = adjusted_predict(X_test)
@@ -157,4 +120,4 @@ if __name__ == "__main__":
     
     # ... (rest of the main code)
 
-print("\nNote: This ultra-advanced model now incorporates learning from past predictions to continuously improve its performance. However, it should still be used cautiously for actual trading decisions.")
+print("\nNote: This ultra-advanced model now incorporates learning from past predictions with safeguards against overfitting to recent history. However, it should still be used cautiously for actual trading decisions.")
