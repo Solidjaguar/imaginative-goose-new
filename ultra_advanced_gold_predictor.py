@@ -26,129 +26,119 @@ from datetime import datetime, timedelta
 import time
 import joblib
 from collections import defaultdict
+import multiprocessing
+from river import linear_model, preprocessing, compose
+import json
+from scipy import stats
 
 # API keys
 CURRENTS_API_KEY = "FkEEwNLACnLEfCoJ09fFe3yrVaPGZ76u-PKi8-yHqGRJ6hd8"
 ALPHA_VANTAGE_API_KEY = "YOUR_ALPHA_VANTAGE_API_KEY"  # Replace with your actual Alpha Vantage API key
 
-def fetch_data(start_date, end_date):
-    # ... (previous fetch_data function remains unchanged)
+# ... (previous functions remain unchanged)
 
-def fetch_news_sentiment(start_date, end_date, max_requests=600):
-    # ... (previous fetch_news_sentiment function remains unchanged)
-
-def fetch_recent_news(days=7):
-    # ... (previous fetch_recent_news function remains unchanged)
-
-def fetch_economic_calendar(start_date, end_date):
-    # ... (previous fetch_economic_calendar function remains unchanged)
-
-def create_features(df, economic_calendar):
-    # ... (previous feature creation code)
-
-    # Add features based on economic calendar
-    important_countries = ['United States', 'China', 'European Union', 'Japan']
-    important_events = ['GDP', 'Inflation Rate', 'Interest Rate Decision', 'Non-Farm Payrolls']
+def parallel_backtest(args):
+    """Helper function for parallel backtesting."""
+    df, economic_calendar, model_names, start_date, end_date, i = args
+    train_df = df.iloc[:i]
+    test_df = df.iloc[i:i+1]
     
-    for country in important_countries:
-        for event in important_events:
-            event_count = sum(1 for e in economic_calendar if e['country'] == country and event.lower() in e['event'].lower())
-            df[f'{country}_{event}_Count'] = event_count
-
-    # Add a feature for the overall number of high-impact events
-    high_impact_count = sum(1 for e in economic_calendar if e['impact'] == 'High')
-    df['High_Impact_Events_Count'] = high_impact_count
-
-    df.dropna(inplace=True)
-    return df
-
-def train_model(model_name, X_train, y_train, params=None):
-    # ... (previous train_model function remains unchanged)
-
-def predict(model, model_name, X):
-    # ... (previous predict function remains unchanged)
-
-def evaluate_model(y_true, y_pred):
-    # ... (previous evaluate_model function remains unchanged)
-
-def plot_predictions(y_true, y_pred, title):
-    # ... (previous plot_predictions function remains unchanged)
-
-def ensemble_predict(predictions):
-    # ... (previous ensemble_predict function remains unchanged)
+    train_calendar = [e for e in economic_calendar if datetime.strptime(e['date'], "%Y-%m-%d") <= train_df.index[-1]]
+    test_calendar = [e for e in economic_calendar if test_df.index[0] <= datetime.strptime(e['date'], "%Y-%m-%d") < test_df.index[0] + timedelta(days=7)]
+    
+    train_df = create_features(train_df, train_calendar)
+    test_df = create_features(test_df, test_calendar)
+    
+    X_train, y_train = train_df.drop('Gold_Price', axis=1), train_df['Gold_Price']
+    X_test, y_test = test_df.drop('Gold_Price', axis=1), test_df['Gold_Price']
+    
+    model_predictions = {}
+    for model_name in model_names:
+        model = train_model(model_name, X_train, y_train)
+        pred = predict(model, model_name, X_test)
+        model_predictions[model_name] = pred[0]
+    
+    ensemble_pred = ensemble_predict(list(model_predictions.values()))
+    
+    return {
+        'date': test_df.index[0],
+        'actual': y_test.values[0],
+        'ensemble_prediction': ensemble_pred,
+        **model_predictions
+    }
 
 def backtest_model(df, economic_calendar, model_names, start_date, end_date, window_size=30):
-    """Backtest the model using expanding window approach."""
+    """Backtest the model using expanding window approach with parallel processing."""
     df = df[(df.index >= start_date) & (df.index <= end_date)]
     economic_calendar = [e for e in economic_calendar if start_date <= datetime.strptime(e['date'], "%Y-%m-%d") <= datetime.strptime(end_date, "%Y-%m-%d")]
     
-    results = []
-    for i in range(window_size, len(df)):
-        train_df = df.iloc[:i]
-        test_df = df.iloc[i:i+1]
-        
-        train_calendar = [e for e in economic_calendar if datetime.strptime(e['date'], "%Y-%m-%d") <= train_df.index[-1]]
-        test_calendar = [e for e in economic_calendar if test_df.index[0] <= datetime.strptime(e['date'], "%Y-%m-%d") < test_df.index[0] + timedelta(days=7)]
-        
-        train_df = create_features(train_df, train_calendar)
-        test_df = create_features(test_df, test_calendar)
-        
-        X_train, y_train = train_df.drop('Gold_Price', axis=1), train_df['Gold_Price']
-        X_test, y_test = test_df.drop('Gold_Price', axis=1), test_df['Gold_Price']
-        
-        model_predictions = {}
-        for model_name in model_names:
-            model = train_model(model_name, X_train, y_train)
-            pred = predict(model, model_name, X_test)
-            model_predictions[model_name] = pred[0]
-        
-        ensemble_pred = ensemble_predict(list(model_predictions.values()))
-        
-        results.append({
-            'date': test_df.index[0],
-            'actual': y_test.values[0],
-            'ensemble_prediction': ensemble_pred,
-            **model_predictions
-        })
-        
-        print(f"Processed up to {test_df.index[0]}")
+    with multiprocessing.Pool() as pool:
+        args = [(df, economic_calendar, model_names, start_date, end_date, i) for i in range(window_size, len(df))]
+        results = pool.map(parallel_backtest, args)
     
     return pd.DataFrame(results)
 
-def update_model(model, model_name, X_new, y_new):
-    """Update the model with new data."""
-    if model_name in ['rf', 'gb', 'xgb', 'lgbm']:
-        # For tree-based models, we can partially fit with new data
-        model.fit(X_new, y_new)
-    elif model_name == 'lstm':
-        # For LSTM, we need to retrain on all data
-        model.fit(X_new, y_new, epochs=10, batch_size=32, verbose=0)
-    # Add more conditions for other model types as needed
+class VersionedModel:
+    def __init__(self, model, version=1):
+        self.model = model
+        self.version = version
+    
+    def save(self, filename):
+        with open(f"{filename}_v{self.version}.json", 'w') as f:
+            json.dump({
+                'model': self.model,
+                'version': self.version
+            }, f)
+    
+    @classmethod
+    def load(cls, filename, version='latest'):
+        if version == 'latest':
+            version = max([int(f.split('_v')[1].split('.')[0]) for f in os.listdir() if f.startswith(filename)])
+        
+        with open(f"{filename}_v{version}.json", 'r') as f:
+            data = json.load(f)
+        
+        return cls(data['model'], data['version'])
+    
+    def update(self, X_new, y_new):
+        self.model = update_model(self.model, self.model.__class__.__name__.lower(), X_new, y_new)
+        self.version += 1
+
+def create_online_model():
+    """Create an online learning model using River library."""
+    return compose.Pipeline(
+        ('scale', preprocessing.StandardScaler()),
+        ('model', linear_model.PARegressor())
+    )
+
+def update_online_model(model, X_new, y_new):
+    """Update the online learning model with new data."""
+    for x, y in zip(X_new.to_dict('records'), y_new):
+        model.learn_one(x, y)
     return model
 
-def assess_event_importance(backtest_results, economic_calendar):
-    """Assess the importance of economic events based on prediction errors."""
-    event_errors = defaultdict(list)
+def adaptive_feature_selection(X, event_importance, threshold=0.5):
+    """Select features based on event importance scores."""
+    selected_features = X.columns.tolist()
+    for feature in X.columns:
+        if any(event[1] in feature for event in event_importance.keys()):
+            event = next(event for event in event_importance.keys() if event[1] in feature)
+            if event_importance[event] < threshold:
+                selected_features.remove(feature)
+    return X[selected_features]
+
+def quantify_uncertainty(model, X, n_bootstrap=1000):
+    """Quantify prediction uncertainty using bootstrap."""
+    predictions = []
+    for _ in range(n_bootstrap):
+        bootstrap_sample = X.sample(n=len(X), replace=True)
+        predictions.append(predict(model, model.__class__.__name__.lower(), bootstrap_sample))
     
-    for _, row in backtest_results.iterrows():
-        date = row['date']
-        error = abs(row['actual'] - row['ensemble_prediction'])
-        
-        # Find events within 7 days before the prediction date
-        relevant_events = [e for e in economic_calendar if date - timedelta(days=7) <= datetime.strptime(e['date'], "%Y-%m-%d") < date]
-        
-        for event in relevant_events:
-            event_key = (event['country'], event['event'])
-            event_errors[event_key].append(error)
+    mean_prediction = np.mean(predictions, axis=0)
+    ci_lower = np.percentile(predictions, 2.5, axis=0)
+    ci_upper = np.percentile(predictions, 97.5, axis=0)
     
-    # Calculate average error for each event type
-    event_importance = {k: np.mean(v) for k, v in event_errors.items()}
-    
-    # Normalize importance scores
-    max_importance = max(event_importance.values())
-    event_importance = {k: v / max_importance for k, v in event_importance.items()}
-    
-    return event_importance
+    return mean_prediction, ci_lower, ci_upper
 
 if __name__ == "__main__":
     # Fetch and prepare data
@@ -177,8 +167,8 @@ if __name__ == "__main__":
     for event, importance in sorted(event_importance.items(), key=lambda x: x[1], reverse=True)[:10]:
         print(f"{event[0]} - {event[1]}: {importance:.4f}")
     
-    # Continuous model updating (simulation)
-    print("\nSimulating continuous model updating...")
+    # Continuous model updating with versioning
+    print("\nSimulating continuous model updating with versioning...")
     latest_data = df.iloc[-30:]  # Last 30 days of data
     latest_calendar = [e for e in economic_calendar if datetime.strptime(e['date'], "%Y-%m-%d") >= latest_data.index[0]]
     latest_data = create_features(latest_data, latest_calendar)
@@ -187,11 +177,21 @@ if __name__ == "__main__":
     y_latest = latest_data['Gold_Price']
     
     for model_name in model_names:
-        model = joblib.load(f"{model_name}_model.joblib")  # Load the saved model
-        updated_model = update_model(model, model_name, X_latest, y_latest)
-        joblib.dump(updated_model, f"{model_name}_model_updated.joblib")  # Save the updated model
+        versioned_model = VersionedModel.load(f"{model_name}_model", 'latest')
+        versioned_model.update(X_latest, y_latest)
+        versioned_model.save(f"{model_name}_model")
     
-    print("Models updated with latest data.")
+    # Online learning
+    online_model = create_online_model()
+    online_model = update_online_model(online_model, X_latest, y_latest)
+    
+    # Adaptive feature selection
+    X_selected = adaptive_feature_selection(X_latest, event_importance)
+    print(f"\nSelected features: {X_selected.columns.tolist()}")
+    
+    # Uncertainty quantification
+    mean_pred, ci_lower, ci_upper = quantify_uncertainty(versioned_model.model, X_selected)
+    print(f"\nPrediction with uncertainty: {mean_pred[0]:.2f} (95% CI: {ci_lower[0]:.2f} - {ci_upper[0]:.2f})")
     
     # Fetch recent news and upcoming economic events for future predictions
     recent_news = fetch_recent_news()
@@ -212,4 +212,4 @@ if __name__ == "__main__":
         print(f"Importance Score: {event_importance.get((event['country'], event['event']), 0):.4f}")
         print("---")
 
-print("\nNote: This ultra-advanced model now incorporates backtesting, continuous updating, and dynamic event importance assessment. However, it should still be used cautiously for actual trading decisions.")
+print("\nNote: This ultra-advanced model now incorporates parallel backtesting, versioned model persistence, online learning, adaptive feature selection, and uncertainty quantification. However, it should still be used cautiously for actual trading decisions.")
