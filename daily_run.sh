@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Install required packages
-pip install yfinance pandas numpy scikit-learn matplotlib flask tensorflow nltk ta-lib requests alpha_vantage
+pip install yfinance pandas numpy scikit-learn matplotlib flask tensorflow nltk ta-lib requests alpha_vantage seaborn scipy
 
 # Run the prediction script hourly
 while true; do
@@ -14,6 +14,9 @@ python3 paper_trader.py &
 
 # Run the model retrainer script
 python3 model_retrainer.py &
+
+# Run the advanced trading system
+python3 advanced_trading.py &
 
 # Run the web server
 python3 web_interface.py
