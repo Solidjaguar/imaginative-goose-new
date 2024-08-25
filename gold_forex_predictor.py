@@ -24,8 +24,8 @@ logging.basicConfig(filename='gold_forex_predictor.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Replace with your actual API keys
-ALPHA_VANTAGE_API_KEY = "YOUR_ALPHA_VANTAGE_API_KEY"
-NEWS_API_KEY = "YOUR_NEWS_API_KEY"
+ALPHA_VANTAGE_API_KEY = "PIFHGHQNBWL37L0T"
+CURRENTS_API_KEY = "YOUR_CURRENTS_API_KEY"
 
 def fetch_all_data(start_date=None, end_date=None):
     # ... (rest of the function remains the same)
@@ -34,8 +34,8 @@ def fetch_economic_indicators(start_date, end_date):
     # ... (rest of the function remains the same)
 
 def fetch_news_sentiment(start_date, end_date):
-    # Use News API to fetch relevant news articles
-    url = f"https://newsapi.org/v2/everything?q=forex OR gold&from={start_date}&to={end_date}&apiKey={NEWS_API_KEY}"
+    # Use Currents API to fetch relevant news articles
+    url = f"https://api.currentsapi.services/v1/search?keywords=forex,gold&language=en&apiKey={CURRENTS_API_KEY}"
     response = requests.get(url)
     news_data = response.json()
 
@@ -44,10 +44,10 @@ def fetch_news_sentiment(start_date, end_date):
     sentiments = []
     dates = []
 
-    for article in news_data['articles']:
+    for article in news_data['news']:
         sentiment = sia.polarity_scores(article['title'] + ' ' + article['description'])
         sentiments.append(sentiment['compound'])
-        dates.append(article['publishedAt'][:10])  # Extract date from datetime string
+        dates.append(article['published'][:10])  # Extract date from datetime string
 
     sentiment_df = pd.DataFrame({'date': dates, 'sentiment': sentiments})
     sentiment_df['date'] = pd.to_datetime(sentiment_df['date'])
