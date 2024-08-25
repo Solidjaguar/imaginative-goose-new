@@ -6,15 +6,38 @@
     <title>Forex Predictor Dashboard</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-        h1 { color: #333; }
-        table { border-collapse: collapse; width: 100%; }
+        h1, h2 { color: #333; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
         img { max-width: 100%; height: auto; }
+        .metrics { display: flex; justify-content: space-around; margin-bottom: 20px; }
+        .metric { text-align: center; }
+        .metric-value { font-size: 24px; font-weight: bold; }
     </style>
 </head>
 <body>
     <h1>Forex Predictor Dashboard</h1>
+    
+    <h2>Model Performance Metrics</h2>
+    <div class="metrics">
+        {% if metrics %}
+            <div class="metric">
+                <div>Mean Squared Error</div>
+                <div class="metric-value">{{ "%.6f"|format(metrics.MSE) }}</div>
+            </div>
+            <div class="metric">
+                <div>Root Mean Squared Error</div>
+                <div class="metric-value">{{ "%.6f"|format(metrics.RMSE) }}</div>
+            </div>
+            <div class="metric">
+                <div>Mean Absolute Error</div>
+                <div class="metric-value">{{ "%.6f"|format(metrics.MAE) }}</div>
+            </div>
+        {% else %}
+            <p>Not enough data to calculate metrics yet.</p>
+        {% endif %}
+    </div>
     
     <h2>Predictions Chart</h2>
     <img src="data:image/png;base64,{{ plot_url }}" alt="Predictions vs Actual Chart">
@@ -33,6 +56,30 @@
             <td>{{ "%.6f"|format(prediction.prediction[0]) }}</td>
             <td>{{ "%.6f"|format(prediction.prediction[1]) }}</td>
             <td>{{ "%.6f"|format(prediction.prediction[2]) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    
+    <h2>Historical Predictions vs Actual</h2>
+    <table>
+        <tr>
+            <th>Date</th>
+            <th>EUR/USD Predicted</th>
+            <th>EUR/USD Actual</th>
+            <th>GBP/USD Predicted</th>
+            <th>GBP/USD Actual</th>
+            <th>JPY/USD Predicted</th>
+            <th>JPY/USD Actual</th>
+        </tr>
+        {% for prediction in predictions[-10:] if prediction.actual %}
+        <tr>
+            <td>{{ prediction.timestamp }}</td>
+            <td>{{ "%.6f"|format(prediction.prediction[0]) }}</td>
+            <td>{{ "%.6f"|format(prediction.actual[0]) }}</td>
+            <td>{{ "%.6f"|format(prediction.prediction[1]) }}</td>
+            <td>{{ "%.6f"|format(prediction.actual[1]) }}</td>
+            <td>{{ "%.6f"|format(prediction.prediction[2]) }}</td>
+            <td>{{ "%.6f"|format(prediction.actual[2]) }}</td>
         </tr>
         {% endfor %}
     </table>
