@@ -43,38 +43,30 @@ from ratelimit import limits, sleep_and_retry
 import json
 import hashlib
 import functools
+from config import *
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 # Initialize APIs
-fred = fredapi.Fred(api_key='YOUR_FRED_API_KEY')  # Replace with your actual FRED API key
-
-# Set the News API key as an environment variable
-os.environ['NEWS_API_KEY'] = 'YOUR_NEWS_API_KEY'  # Replace with your actual News API key
-
-# Initialize NewsApiClient with the key from the environment variable
-newsapi = NewsApiClient(api_key=os.getenv('NEWS_API_KEY'))
+fred = fredapi.Fred(api_key=FRED_API_KEY)
+newsapi = NewsApiClient(api_key=NEWS_API_KEY)
 
 # Caching decorator
 def cache_result(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # Create a unique key based on the function name and arguments
         key = hashlib.md5(f"{func.__name__}{str(args)}{str(kwargs)}".encode()).hexdigest()
-        cache_file = f"cache/{key}.json"
+        cache_file = f"{CACHE_DIR}/{key}.json"
         
-        # Check if cached result exists and is less than 1 day old
-        if os.path.exists(cache_file) and time.time() - os.path.getmtime(cache_file) < 86400:
+        if os.path.exists(cache_file) and time.time() - os.path.getmtime(cache_file) < CACHE_EXPIRY:
             with open(cache_file, 'r') as f:
                 return json.load(f)
         
-        # If not cached or expired, call the function
         result = func(*args, **kwargs)
         
-        # Cache the result
-        os.makedirs('cache', exist_ok=True)
+        os.makedirs(CACHE_DIR, exist_ok=True)
         with open(cache_file, 'w') as f:
             json.dump(result, f)
         
@@ -91,15 +83,8 @@ def rate_limited_newsapi_call(func, *args, **kwargs):
 def fetch_economic_data(start_date: str, end_date: str) -> pd.DataFrame:
     """Fetch economic data from FRED."""
     logger.info(f"Fetching economic data from {start_date} to {end_date}")
-    indicators = {
-        'CPIAUCSL': 'Inflation_Rate',
-        'FEDFUNDS': 'Interest_Rate',
-        'DTWEXBGS': 'USD_Index',
-        'GDP': 'GDP',
-        'UNRATE': 'Unemployment_Rate'
-    }
     data = {}
-    for series_id, name in indicators.items():
+    for series_id, name in FRED_INDICATORS.items():
         try:
             series = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
             data[name] = series
@@ -199,7 +184,7 @@ def create_features(gold_data: pd.DataFrame, economic_data: pd.DataFrame, sentim
 
 def detect_anomalies(X: pd.DataFrame) -> np.ndarray:
     """Detect anomalies in the feature set."""
-    clf = IForest(contamination=0.1, random_state=42)
+    clf = IForest(contamination=ANOMALY_CONTAMINATION, random_state=42)
     return clf.fit_predict(X)
 
 def optimize_hyperparameters_parallel(X: pd.DataFrame, y: pd.Series, model_names: List[str]) -> Dict[str, Dict]:
@@ -273,16 +258,16 @@ def create_stacking_ensemble(models: List[Tuple[str, object]]) -> StackingRegres
 def train_lstm(X: np.ndarray, y: np.ndarray) -> Sequential:
     """Train an LSTM model."""
     model = Sequential([
-        Bidirectional(LSTM(64, return_sequences=True, kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4))),
-        Dropout(0.2),
-        Dense(32, activation='relu'),
-        Dropout(0.2),
+        Bidirectional(LSTM(LSTM_UNITS, return_sequences=True, kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4))),
+        Dropout(LSTM_DROPOUT),
+        Dense(LSTM_DENSE_UNITS, activation='relu'),
+        Dropout(LSTM_DROPOUT),
         Dense(1)
     ])
-    model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
+    model.compile(optimizer=Adam(learning_rate=LSTM_LEARNING_RATE), loss='mse')
     early_stopping = EarlyStopping(patience=10, restore_best_weights=True)
     reduce_lr = ReduceLROnPlateau(factor=0.2, patience=5)
-    model.fit(X, y, epochs=100, batch_size=32, validation_split=0.2, callbacks=[early_stopping, reduce_lr], verbose=0)
+    model.fit(X, y, epochs=LSTM_EPOCHS, batch_size=LSTM_BATCH_SIZE, validation_split=0.2, callbacks=[early_stopping, reduce_lr], verbose=0)
     return model
 
 def prepare_lstm_data(X: pd.DataFrame, y: pd.Series, lookback: int = 30) -> Tuple[np.ndarray, np.ndarray]:
@@ -294,7 +279,7 @@ def prepare_lstm_data(X: pd.DataFrame, y: pd.Series, lookback: int = 30) -> Tupl
         y.append(data[i + lookback, -1])
     return np.array(X), np.array(y)
 
-def calculate_prediction_intervals(predictions: np.ndarray, y_true: np.ndarray, confidence: float = 0.95) -> np.ndarray:
+def calculate_prediction_intervals(predictions: np.ndarray, y_true: np.ndarray, confidence: float = PREDICTION_INTERVAL_CONFIDENCE) -> np.ndarray:
     """Calculate prediction intervals."""
     errors = y_true - predictions
     std_error = np.std(errors)
@@ -319,7 +304,7 @@ def monitor_performance(y_true: np.ndarray, y_pred: np.ndarray, model_name: str)
     mae = mean_absolute_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
     
-    conn = sqlite3.connect('performance_metrics.db')
+    conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS performance
                  (timestamp TEXT, model TEXT, mse REAL, mae REAL, r2 REAL)''')
@@ -328,11 +313,11 @@ def monitor_performance(y_true: np.ndarray, y_pred: np.ndarray, model_name: str)
     conn.commit()
     conn.close()
 
-def save_checkpoint(data: Dict, filename: str) -> None:
+def save_checkpoint(data: Dict, filename: str = CHECKPOINT_FILE) -> None:
     """Save model checkpoint."""
     joblib.dump(data, filename)
 
-def load_checkpoint(filename: str) -> Dict:
+def load_checkpoint(filename: str = CHECKPOINT_FILE) -> Dict:
     """Load model checkpoint."""
     return joblib.load(filename)
 
@@ -342,28 +327,25 @@ def schedule_retraining() -> None:
         logger.info("Retraining models...")
         # Add retraining logic here
     
-    schedule.every().day.at("00:00").do(retrain)
+    schedule.every().day.at(RETRAIN_TIME).do(retrain)
     while True:
         schedule.run_pending()
         time.sleep(3600)  # Sleep for an hour between checks
 
-def fetch_data_for_model(days: int = 30):
-    """Fetch all necessary data for the model using a rolling window."""
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=days)
-    
+def fetch_data_for_model(start_date: str, end_date: str):
+    """Fetch all necessary data for the model."""
     try:
-        gold_data = yf.download("GC=F", start=start_date, end=end_date)
+        gold_data = yf.download(GOLD_SYMBOL, start=start_date, end=end_date)
     except Exception as e:
         logger.error(f"Error fetching gold data: {str(e)}")
         gold_data = pd.DataFrame()
     
-    economic_data = fetch_economic_data(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-    sentiment_data = fetch_sentiment_data(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-    geopolitical_events = fetch_geopolitical_events(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+    economic_data = fetch_economic_data(start_date, end_date)
+    sentiment_data = fetch_sentiment_data(start_date, end_date)
+    geopolitical_events = fetch_geopolitical_events(start_date, end_date)
     
     related_assets = {}
-    for asset, symbol in [('Silver', "SI=F"), ('Oil', "CL=F"), ('SP500', "^GSPC")]:
+    for asset, symbol in RELATED_ASSETS:
         try:
             related_assets[asset] = yf.download(symbol, start=start_date, end=end_date)
         except Exception as e:
@@ -373,17 +355,19 @@ def fetch_data_for_model(days: int = 30):
     return gold_data, economic_data, sentiment_data, geopolitical_events, related_assets
 
 if __name__ == "__main__":
-    # Check for NEWS_API_KEY
-    if 'NEWS_API_KEY' not in os.environ:
-        logger.error("NEWS_API_KEY environment variable is not set. Please set it before running the script.")
+    # Check for API keys
+    if not NEWS_API_KEY or not FRED_API_KEY:
+        logger.error("NEWS_API_KEY or FRED_API_KEY is not set. Please set them before running the script.")
         exit(1)
 
     try:
         # Set up distributed computing
         client = Client()  # Set up Dask client for distributed computing
         
-        # Fetch data for the last 30 days
-        gold_data, economic_data, sentiment_data, geopolitical_events, related_assets = fetch_data_for_model(30)
+        # Fetch data for the last LOOKBACK_DAYS days
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=LOOKBACK_DAYS)
+        gold_data, economic_data, sentiment_data, geopolitical_events, related_assets = fetch_data_for_model(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         
         # Check if we have enough data to proceed
         if len(gold_data) < 5:  # Arbitrary threshold, adjust as needed
@@ -409,23 +393,22 @@ if __name__ == "__main__":
         logger.info(f"Detected {sum(anomalies == -1)} anomalies")
         
         # Feature selection
-        rfe = RFE(estimator=RandomForestRegressor(random_state=42), n_features_to_select=30)
+        rfe = RFE(estimator=RandomForestRegressor(random_state=42), n_features_to_select=N_FEATURES_TO_SELECT)
         X_selected = X_scaled.map_partitions(lambda df: pd.DataFrame(rfe.fit_transform(df, y), columns=df.columns[rfe.support_], index=df.index))
         
         # Split data
-        train_size = int(len(df) * 0.8)
+        train_size = int(len(df) * TRAIN_TEST_SPLIT)
         X_train, X_test = X_selected.iloc[:train_size], X_selected.iloc[train_size:]
         y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
         
         # Optimize and train models in parallel
-        model_names = ['rf', 'xgb', 'lgbm', 'elasticnet']
-        best_params = optimize_hyperparameters_parallel(X_train.compute(), y_train.compute(), model_names)
+        best_params = optimize_hyperparameters_parallel(X_train.compute(), y_train.compute(), MODEL_NAMES)
         
         with Pool(processes=cpu_count()) as pool:
             models = pool.map(train_model_parallel, [(X_train.compute(), y_train.compute(), model_name, params) for model_name, params in best_params.items()])
         
         # Create and train stacking ensemble
-        stacking_model = create_stacking_ensemble(list(zip(model_names, models)))
+        stacking_model = create_stacking_ensemble(list(zip(MODEL_NAMES, models)))
         stacking_model.fit(X_train.compute(), y_train.compute())
         
         # Train LSTM model
@@ -461,7 +444,7 @@ if __name__ == "__main__":
             'scaler': scaler,
             'rfe': rfe
         }
-        save_checkpoint(checkpoint_data, 'model_checkpoint.joblib')
+        save_checkpoint(checkpoint_data)
         
         # Schedule retraining
         import threading
@@ -474,4 +457,4 @@ if __name__ == "__main__":
         logger.error(f"An error occurred during script execution: {str(e)}")
         raise
 
-print("\nNote: This script now implements caching for API calls and includes more robust error handling. Please ensure you have sufficient disk space for caching. The cache is stored in a 'cache' directory and is valid for 24 hours.")
+print("\nNote: This script now uses configuration parameters from config.py and implements caching for API calls. Please ensure you have sufficient disk space for caching. The cache is stored in a 'cache' directory and is valid for 24 hours.")
