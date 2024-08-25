@@ -6,7 +6,7 @@
     <title>Forex Predictor Dashboard</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-        h1, h2 { color: #333; }
+        h1, h2, h3 { color: #333; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
@@ -103,6 +103,30 @@
     <img src="data:image/png;base64,{{ plot }}" alt="Backtest Plot for {{ currency_pair }}">
     {% endfor %}
     {% endif %}
+    {% endif %}
+    
+    {% if trading_strategy_results %}
+    <h2>Trading Strategy Results</h2>
+    <table>
+        <tr>
+            <th>Currency Pair</th>
+            <th>Final Return</th>
+            <th>Sharpe Ratio</th>
+        </tr>
+        {% for result in trading_strategy_results %}
+        <tr>
+            <td>{{ result.currency_pair }}</td>
+            <td>{{ "%.4f"|format(result.final_return) }}</td>
+            <td>{{ "%.4f"|format(result.sharpe_ratio) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    
+    <h2>Trading Strategy Plots</h2>
+    {% for result in trading_strategy_results %}
+    <h3>{{ result.currency_pair }}</h3>
+    <img src="data:image/png;base64,{{ result.plot }}" alt="Trading Strategy Plot for {{ result.currency_pair }}">
+    {% endfor %}
     {% endif %}
     
     <h2>Latest Predictions</h2>

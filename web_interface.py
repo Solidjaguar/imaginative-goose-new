@@ -82,6 +82,13 @@ def load_backtest_plots():
     except FileNotFoundError:
         return None
 
+def load_trading_strategy_results():
+    try:
+        with open('trading_strategy_results.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
 @app.route('/')
 def index():
     predictions = load_predictions()
@@ -91,9 +98,11 @@ def index():
     feature_importance = load_feature_importance()
     backtest_results = load_backtest_results()
     backtest_plots = load_backtest_plots()
+    trading_strategy_results = load_trading_strategy_results()
     return render_template('index.html', predictions=predictions, plot_url=plot_url, metrics=metrics, 
                            cv_scores=cv_scores, feature_importance=feature_importance, 
-                           backtest_results=backtest_results, backtest_plots=backtest_plots)
+                           backtest_results=backtest_results, backtest_plots=backtest_plots,
+                           trading_strategy_results=trading_strategy_results)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

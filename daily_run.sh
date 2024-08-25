@@ -9,6 +9,9 @@ python3 gold_forex_predictor.py
 # Run the backtesting script
 python3 backtester.py
 
+# Run the trading strategy script
+python3 trading_strategy.py
+
 # Start the web server
 python3 web_interface.py &
 
