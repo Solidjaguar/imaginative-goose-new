@@ -12,6 +12,9 @@ python3 backtester.py
 # Run the trading strategy script
 python3 trading_strategy.py
 
+# Run the paper trading script
+python3 paper_trader.py
+
 # Start the web server
 python3 web_interface.py &
 

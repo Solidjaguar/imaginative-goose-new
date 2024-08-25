@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,6 +6,7 @@ import io
 import base64
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
+from paper_trader import PaperTrader
 
 app = Flask(__name__)
 
@@ -89,6 +90,13 @@ def load_trading_strategy_results():
     except FileNotFoundError:
         return None
 
+def load_paper_trading_results():
+    try:
+        with open('paper_trading_results.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
 @app.route('/')
 def index():
     predictions = load_predictions()
@@ -99,10 +107,25 @@ def index():
     backtest_results = load_backtest_results()
     backtest_plots = load_backtest_plots()
     trading_strategy_results = load_trading_strategy_results()
+    paper_trading_results = load_paper_trading_results()
     return render_template('index.html', predictions=predictions, plot_url=plot_url, metrics=metrics, 
                            cv_scores=cv_scores, feature_importance=feature_importance, 
                            backtest_results=backtest_results, backtest_plots=backtest_plots,
-                           trading_strategy_results=trading_strategy_results)
+                           trading_strategy_results=trading_strategy_results,
+                           paper_trading_results=paper_trading_results)
+
+@app.route('/run_paper_trading')
+def run_paper_trading():
+    paper_trader = PaperTrader()
+    portfolio_values = paper_trader.run_paper_trading()
+    
+    with open('paper_trading_results.json', 'w') as f:
+        json.dump({
+            'portfolio_values': portfolio_values,
+            'trade_history': paper_trader.trade_history
+        }, f)
+    
+    return jsonify({'status': 'success', 'message': 'Paper trading completed'})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

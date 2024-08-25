@@ -14,7 +14,9 @@
         .metrics { display: flex; justify-content: space-around; margin-bottom: 20px; }
         .metric { text-align: center; }
         .metric-value { font-size: 24px; font-weight: bold; }
+        #paperTradingBtn { margin-bottom: 20px; padding: 10px 20px; font-size: 16px; }
     </style>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
     <h1>Forex Predictor Dashboard</h1>
@@ -131,6 +133,10 @@
     {% endfor %}
     {% endif %}
     
+    <h2>Paper Trading</h2>
+    <button id="paperTradingBtn">Run Paper Trading</button>
+    <div id="paperTradingResults"></div>
+    
     <h2>Latest Predictions</h2>
     <table>
         <tr>
@@ -172,5 +178,35 @@
         </tr>
         {% endfor %}
     </table>
+
+    <script>
+        document.getElementById('paperTradingBtn').addEventListener('click', function() {
+            fetch('/run_paper_trading')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Paper trading completed. Refreshing page to show results.');
+                        location.reload();
+                    } else {
+                        alert('Error running paper trading. Please check the logs.');
+                    }
+                });
+        });
+
+        {% if paper_trading_results %}
+        var portfolioValues = {{ paper_trading_results.portfolio_values | tojson }};
+        var trace = {
+            x: portfolioValues.map(d => d.timestamp),
+            y: portfolioValues.map(d => d.value),
+            type: 'scatter'
+        };
+        var layout = {
+            title: 'Paper Trading Portfolio Value',
+            xaxis: { title: 'Date' },
+            yaxis: { title: 'Portfolio Value' }
+        };
+        Plotly.newPlot('paperTradingResults', [trace], layout);
+        {% endif %}
+    </script>
 </body>
 </html>
