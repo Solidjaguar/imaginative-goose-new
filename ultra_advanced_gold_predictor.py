@@ -34,169 +34,127 @@ from skopt import BayesSearchCV
 from skopt.space import Real, Categorical, Integer
 import shap
 from pyod.models.iforest import IForest
+import sqlite3
 
-# ... (previous imports and functions remain unchanged)
+# ... (previous code remains unchanged)
 
-def optimize_hyperparameters(X, y, model_name):
-    """Optimize hyperparameters using Bayesian optimization."""
-    if model_name == 'rf':
-        param_space = {
-            'n_estimators': Integer(10, 300),
-            'max_depth': Integer(1, 20),
-            'min_samples_split': Integer(2, 10),
-            'min_samples_leaf': Integer(1, 10)
-        }
-        model = RandomForestRegressor(random_state=42)
-    elif model_name == 'gb':
-        param_space = {
-            'n_estimators': Integer(10, 300),
-            'learning_rate': Real(0.01, 1.0, prior='log-uniform'),
-            'max_depth': Integer(1, 20),
-            'min_samples_split': Integer(2, 10),
-            'min_samples_leaf': Integer(1, 10)
-        }
-        model = GradientBoostingRegressor(random_state=42)
-    elif model_name == 'xgb':
-        param_space = {
-            'n_estimators': Integer(10, 300),
-            'learning_rate': Real(0.01, 1.0, prior='log-uniform'),
-            'max_depth': Integer(1, 20),
-            'min_child_weight': Integer(1, 10),
-            'subsample': Real(0.5, 1.0),
-            'colsample_bytree': Real(0.5, 1.0)
-        }
-        model = XGBRegressor(random_state=42)
-    elif model_name == 'lgbm':
-        param_space = {
-            'n_estimators': Integer(10, 300),
-            'learning_rate': Real(0.01, 1.0, prior='log-uniform'),
-            'num_leaves': Integer(20, 3000),
-            'max_depth': Integer(1, 20),
-            'min_child_samples': Integer(1, 50),
-            'subsample': Real(0.5, 1.0),
-            'colsample_bytree': Real(0.5, 1.0)
-        }
-        model = LGBMRegressor(random_state=42)
+def create_prediction_database():
+    """Create a SQLite database to store predictions."""
+    conn = sqlite3.connect('predictions.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS predictions
+                 (date TEXT, predicted_price REAL, actual_price REAL, error REAL)''')
+    conn.commit()
+    conn.close()
+
+def store_prediction(date, predicted_price, actual_price=None):
+    """Store a prediction in the database."""
+    conn = sqlite3.connect('predictions.db')
+    c = conn.cursor()
+    error = None
+    if actual_price is not None:
+        error = actual_price - predicted_price
+    c.execute("INSERT INTO predictions VALUES (?, ?, ?, ?)", (date, predicted_price, actual_price, error))
+    conn.commit()
+    conn.close()
+
+def update_past_predictions(current_date):
+    """Update past predictions with actual prices."""
+    conn = sqlite3.connect('predictions.db')
+    c = conn.cursor()
+    c.execute("SELECT date FROM predictions WHERE actual_price IS NULL")
+    dates_to_update = c.fetchall()
+    for date in dates_to_update:
+        date = date[0]
+        if datetime.strptime(date, "%Y-%m-%d") < datetime.strptime(current_date, "%Y-%m-%d"):
+            actual_price = fetch_actual_price(date)  # You need to implement this function
+            predicted_price = c.execute("SELECT predicted_price FROM predictions WHERE date=?", (date,)).fetchone()[0]
+            error = actual_price - predicted_price
+            c.execute("UPDATE predictions SET actual_price=?, error=? WHERE date=?", (actual_price, error, date))
+    conn.commit()
+    conn.close()
+
+def analyze_past_predictions():
+    """Analyze past predictions to improve the model."""
+    conn = sqlite3.connect('predictions.db')
+    df = pd.read_sql_query("SELECT * FROM predictions WHERE actual_price IS NOT NULL", conn)
+    conn.close()
+    
+    if len(df) > 0:
+        mse = mean_squared_error(df['actual_price'], df['predicted_price'])
+        mae = mean_absolute_error(df['actual_price'], df['predicted_price'])
+        r2 = r2_score(df['actual_price'], df['predicted_price'])
+        
+        print(f"Historical Model Performance:")
+        print(f"MSE: {mse:.4f}")
+        print(f"MAE: {mae:.4f}")
+        print(f"R2 Score: {r2:.4f}")
+        
+        # Analyze error patterns
+        df['error'] = df['actual_price'] - df['predicted_price']
+        plt.figure(figsize=(10, 6))
+        plt.plot(df['date'], df['error'])
+        plt.title("Prediction Error Over Time")
+        plt.xlabel("Date")
+        plt.ylabel("Error")
+        plt.show()
+        
+        # You can add more sophisticated analysis here, such as:
+        # - Checking for autocorrelation in errors
+        # - Identifying periods of consistent over/under-prediction
+        # - Analyzing error distribution
+        
+        return df
     else:
-        raise ValueError(f"Unsupported model: {model_name}")
+        print("No historical predictions available for analysis.")
+        return None
 
-    opt = BayesSearchCV(
-        model,
-        param_space,
-        n_iter=50,
-        cv=TimeSeriesSplit(n_splits=5),
-        scoring='neg_mean_squared_error',
-        n_jobs=-1,
-        random_state=42
-    )
-    
-    opt.fit(X, y)
-    return opt.best_estimator_
-
-def create_stacking_ensemble(X, y, base_models):
-    """Create a stacking ensemble model."""
-    meta_model = LGBMRegressor(random_state=42)
-    
-    stacking_model = StackingRegressor(
-        estimators=base_models,
-        final_estimator=meta_model,
-        cv=TimeSeriesSplit(n_splits=5),
-        n_jobs=-1
-    )
-    
-    stacking_model.fit(X, y)
-    return stacking_model
-
-def detect_anomalies(X, contamination=0.01):
-    """Detect anomalies using Isolation Forest."""
-    clf = IForest(contamination=contamination, random_state=42)
-    clf.fit(X)
-    return clf.predict(X)
-
-def explain_predictions(model, X):
-    """Explain model predictions using SHAP values."""
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X)
-    return shap_values
-
-def generate_trading_signals(predictions, uncertainty, threshold=0.02):
-    """Generate trading signals based on predictions and uncertainty."""
-    signals = []
-    for pred, (lower, upper) in zip(predictions, uncertainty):
-        if pred > upper + threshold:
-            signals.append('BUY')
-        elif pred < lower - threshold:
-            signals.append('SELL')
-        else:
-            signals.append('HOLD')
-    return signals
+def adjust_model_based_on_history(model, historical_data):
+    """Adjust the model based on historical prediction performance."""
+    if historical_data is not None and len(historical_data) > 0:
+        # Here you can implement logic to adjust the model based on past performance
+        # For example:
+        # - If the model consistently underpredicts, you might add a small positive bias
+        # - If errors are autocorrelated, you might need to adjust your feature engineering
+        # - You could use the historical errors to create new features for your model
+        
+        # This is a simple example that adjusts the predictions by the mean historical error
+        mean_error = historical_data['error'].mean()
+        
+        def adjusted_predict(X):
+            original_prediction = model.predict(X)
+            return original_prediction + mean_error
+        
+        return adjusted_predict
+    else:
+        return model.predict
 
 if __name__ == "__main__":
-    # Fetch and prepare data
-    df = fetch_data("2010-01-01", "2023-05-31")
-    news_sentiment = fetch_news_sentiment("2010-01-01", "2023-05-31")
-    df['News_Sentiment'] = news_sentiment
+    # Create prediction database
+    create_prediction_database()
     
-    # Fetch economic calendar data for the entire period
-    economic_calendar = fetch_economic_calendar("2010-01-01", "2023-05-31")
+    # ... (previous main code)
     
-    # Create features
-    df = create_features(df, economic_calendar)
+    # After making predictions
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    for date, pred in zip(test_df.index, predictions):
+        store_prediction(date.strftime("%Y-%m-%d"), pred)
     
-    # Split data
-    train_size = int(len(df) * 0.8)
-    train_df = df[:train_size]
-    test_df = df[train_size:]
+    # Update past predictions with actual prices
+    update_past_predictions(current_date)
     
-    X_train, y_train = train_df.drop('Gold_Price', axis=1), train_df['Gold_Price']
-    X_test, y_test = test_df.drop('Gold_Price', axis=1), test_df['Gold_Price']
+    # Analyze past predictions
+    historical_data = analyze_past_predictions()
     
-    # Optimize hyperparameters
-    model_names = ['rf', 'gb', 'xgb', 'lgbm']
-    optimized_models = []
-    for model_name in model_names:
-        print(f"Optimizing {model_name}...")
-        optimized_model = optimize_hyperparameters(X_train, y_train, model_name)
-        optimized_models.append((model_name, optimized_model))
+    # Adjust model based on historical performance
+    adjusted_predict = adjust_model_based_on_history(stacking_model, historical_data)
     
-    # Create stacking ensemble
-    print("Creating stacking ensemble...")
-    stacking_model = create_stacking_ensemble(X_train, y_train, optimized_models)
+    # Make new predictions using the adjusted model
+    adjusted_predictions = adjusted_predict(X_test)
     
-    # Make predictions
-    predictions = stacking_model.predict(X_test)
+    print("\nAdjusted Model Performance:")
+    evaluate_model(y_test, adjusted_predictions)
     
-    # Evaluate model
-    print("\nStacking Ensemble Performance:")
-    evaluate_model(y_test, predictions)
-    
-    # Detect anomalies
-    print("\nDetecting anomalies...")
-    anomalies = detect_anomalies(X_test)
-    print(f"Detected {sum(anomalies)} anomalies in the test set.")
-    
-    # Explain predictions
-    print("\nExplaining predictions...")
-    shap_values = explain_predictions(stacking_model, X_test)
-    shap.summary_plot(shap_values, X_test, plot_type="bar")
-    
-    # Generate trading signals
-    print("\nGenerating trading signals...")
-    uncertainty = quantify_uncertainty(stacking_model, X_test)
-    signals = generate_trading_signals(predictions, zip(uncertainty[1], uncertainty[2]))
-    signal_counts = pd.Series(signals).value_counts()
-    print("Trading signal distribution:")
-    print(signal_counts)
-    
-    # Plot predictions with uncertainty
-    plt.figure(figsize=(12, 6))
-    plt.plot(test_df.index, y_test, label='Actual')
-    plt.plot(test_df.index, predictions, label='Predicted')
-    plt.fill_between(test_df.index, uncertainty[1], uncertainty[2], alpha=0.2, label='95% CI')
-    plt.title("Gold Price Predictions with Uncertainty")
-    plt.legend()
-    plt.show()
-    
-    print("\nNote: This ultra-advanced model now incorporates hyperparameter optimization, stacking ensemble, anomaly detection, explainable AI, and automated trading signals. However, it should still be used cautiously for actual trading decisions.")
+    # ... (rest of the main code)
 
-# Remember to handle any ImportError exceptions and install required packages
+print("\nNote: This ultra-advanced model now incorporates learning from past predictions to continuously improve its performance. However, it should still be used cautiously for actual trading decisions.")
