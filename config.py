@@ -6,9 +6,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 
-# API keys (replace with your actual keys)
-ALPHA_VANTAGE_API_KEY = 'your_alpha_vantage_api_key'
-FRED_API_KEY = 'your_fred_api_key'
+# API keys (your actual keys)
+ALPHA_VANTAGE_API_KEY = 'XMTJLR6ZHLQ2JZJL'
+FRED_API_KEY = '64c5fd46f9f13ca6cb24ae0c2ebfb08d'
 
 # Model file paths
 RANDOM_FOREST_MODEL_PATH = os.path.join(MODELS_DIR, 'random_forest_model.joblib')

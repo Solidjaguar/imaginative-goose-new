@@ -4,9 +4,9 @@
 data_dir: ./data
 models_dir: ./models
 
-# API Keys (replace with your actual keys)
-alpha_vantage_api_key: your_alpha_vantage_api_key
-fred_api_key: your_fred_api_key
+# API Keys (your actual keys)
+alpha_vantage_api_key: XMTJLR6ZHLQ2JZJL
+fred_api_key: 64c5fd46f9f13ca6cb24ae0c2ebfb08d
 
 # Model file paths
 random_forest_model_path: models/random_forest_model.joblib
