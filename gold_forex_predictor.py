@@ -31,28 +31,31 @@ def fetch_forex_data(from_currency, to_currency):
     df.columns = ['open', 'high', 'low', 'close']
     return df
 
-def fetch_all_forex_data():
+def fetch_all_data():
     currency_pairs = [("EUR", "USD"), ("GBP", "USD"), ("JPY", "USD")]
-    forex_data = {}
+    
+    data = {}
     
     for base, quote in currency_pairs:
         print(f"Fetching {base}/{quote} data...")
-        forex_data[f"{base}/{quote}"] = fetch_forex_data(base, quote)
-        
-    return forex_data
+        data[f"{base}/{quote}"] = fetch_forex_data(base, quote)
+    
+    return data
 
-def prepare_data(forex_data):
+def prepare_data(data):
     combined_data = pd.DataFrame()
     
-    for pair, data in forex_data.items():
-        if data is not None:
-            combined_data[f"{pair}_close"] = data['close']
+    for key, df in data.items():
+        if df is not None:
+            combined_data[f"{key}_close"] = df['close']
     
     combined_data.dropna(inplace=True)
-    returns = combined_data.pct_change()
     
-    X = returns.iloc[:-1]
-    y = returns.iloc[1:]
+    forex_returns = combined_data.pct_change()
+    forex_returns.dropna(inplace=True)
+    
+    X = forex_returns.iloc[:-1]
+    y = forex_returns.iloc[1:]
     
     return X, y
 
@@ -113,11 +116,11 @@ def evaluate_predictions():
 def main():
     model_filename = 'forex_prediction_model.joblib'
     
-    # Fetch forex data
-    forex_data = fetch_all_forex_data()
+    # Fetch all data
+    data = fetch_all_data()
     
     # Prepare data for modeling
-    X, y = prepare_data(forex_data)
+    X, y = prepare_data(data)
     
     # Check if model exists, if not, train a new one
     if os.path.exists(model_filename):

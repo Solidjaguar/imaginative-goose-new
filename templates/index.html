@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forex Predictor Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        h1 { color: #333; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        img { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+    <h1>Forex Predictor Dashboard</h1>
+    
+    <h2>Predictions Chart</h2>
+    <img src="data:image/png;base64,{{ plot_url }}" alt="Predictions vs Actual Chart">
+    
+    <h2>Latest Predictions</h2>
+    <table>
+        <tr>
+            <th>Date</th>
+            <th>EUR/USD Prediction</th>
+            <th>GBP/USD Prediction</th>
+            <th>JPY/USD Prediction</th>
+        </tr>
+        {% for prediction in predictions[-5:] %}
+        <tr>
+            <td>{{ prediction.timestamp }}</td>
+            <td>{{ "%.6f"|format(prediction.prediction[0]) }}</td>
+            <td>{{ "%.6f"|format(prediction.prediction[1]) }}</td>
+            <td>{{ "%.6f"|format(prediction.prediction[2]) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
