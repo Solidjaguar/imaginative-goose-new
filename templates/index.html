@@ -1,34 +1,61 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Gold Price Predictor and Paper Trader</title>
-    <meta http-equiv="refresh" content="60">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Price Predictor</title>
     <style>
         body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }}
         h1, h2 {{ color: #333; }}
-        .price {{ font-size: 24px; font-weight: bold; color: #4CAF50; }}
-        table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
-        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
-        th {{ background-color: #4CAF50; color: white; }}
+        table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #f2f2f2; }}
+        img {{ max-width: 100%; height: auto; margin-bottom: 20px; }}
     </style>
 </head>
 <body>
-    <h1>Gold Price Predictor and Paper Trader</h1>
-    <p>Current gold price: <span class="price">${latest_price}</span></p>
-    <h2>Predictions:</h2>
+    <h1>Gold Price Predictor</h1>
+    
+    <h2>Latest Gold Price: ${latest_price:.2f}</h2>
+    
+    <h2>Predictions</h2>
     <table>
-        <tr><th>Date</th><th>Predicted Price</th></tr>
+        <tr>
+            <th>Date</th>
+            <th>Predicted Price</th>
+        </tr>
         {predictions}
     </table>
-    <h2>Paper Trading Portfolio:</h2>
-    <p>Portfolio Value: ${portfolio_value:.2f}</p>
+    
+    <h2>Portfolio Summary</h2>
+    <p>Total Portfolio Value: ${portfolio_value:.2f}</p>
     <p>Cash Balance: ${balance:.2f}</p>
     <p>Gold Holdings: {gold_holdings:.4f} oz</p>
-    <h2>Recent Trades:</h2>
+    
+    <h2>Recent Trades</h2>
     <table>
-        <tr><th>Date</th><th>Type</th><th>Price</th><th>Amount</th></tr>
+        <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Price</th>
+            <th>Amount</th>
+        </tr>
         {recent_trades}
     </table>
-    <h2>Gold Price Prediction Chart:</h2>
-    <img src="/static/gold_predictions.png" alt="Gold Price Predictions">
+    
+    <h2>Performance Metrics</h2>
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Value</th>
+        </tr>
+        {performance_metrics}
+    </table>
+    
+    <h2>Gold Price Predictions Chart</h2>
+    <img src="/gold_predictions.png" alt="Gold Price Predictions">
+    
+    <h2>Trading Performance Chart</h2>
+    <img src="/trading_performance.png" alt="Trading Performance">
 </body>
 </html>

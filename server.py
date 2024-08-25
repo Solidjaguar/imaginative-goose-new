@@ -16,12 +16,14 @@ class RequestHandler(SimpleHTTPRequestHandler):
             recent_trades = data.get('recent_trades', [])
             balance = data.get('balance', 'N/A')
             gold_holdings = data.get('gold_holdings', 'N/A')
+            performance_metrics = data.get('performance_metrics', {})
             
             with open('templates/index.html', 'r') as f:
                 html_template = f.read()
             
             predictions_html = ''.join(f"<tr><td>{date}</td><td>${price:.2f}</td></tr>" for date, price in predictions.items())
             trades_html = ''.join(f"<tr><td>{trade['date']}</td><td>{trade['type']}</td><td>${trade['price']:.2f}</td><td>{trade['amount']:.4f} oz</td></tr>" for trade in recent_trades)
+            metrics_html = ''.join(f"<tr><td>{metric}</td><td>{value:.4f}</td></tr>" for metric, value in performance_metrics.items())
             
             html_content = html_template.format(
                 latest_price=latest_price,
@@ -29,10 +31,14 @@ class RequestHandler(SimpleHTTPRequestHandler):
                 portfolio_value=portfolio_value,
                 balance=balance,
                 gold_holdings=gold_holdings,
-                recent_trades=trades_html
+                recent_trades=trades_html,
+                performance_metrics=metrics_html
             )
             
             self.wfile.write(html_content.encode())
+        elif self.path == '/gold_predictions.png' or self.path == '/trading_performance.png':
+            self.path = f'static{self.path}'
+            return super().do_GET()
         else:
             super().do_GET()
 
