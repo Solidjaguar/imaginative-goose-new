@@ -19,6 +19,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             recent_trades = data.get('recent_trades', [])
             balance = data.get('balance', 'N/A')
             gold_holdings = data.get('gold_holdings', 'N/A')
+            learning_progress = data.get('learning_progress', {})
             
             # Check if background process is running
             try:
@@ -36,6 +37,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Gold Price Predictor and Paper Trader</title>
+                <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
                 <style>
                     body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }}
                     h1, h2 {{ color: #333; }}
@@ -43,6 +45,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
                     th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
                     th {{ background-color: #4CAF50; color: white; }}
+                    .chart-container {{ width: 100%; height: 300px; margin-top: 20px; }}
                 </style>
                 <script>
                     function refreshPage() {{
@@ -79,6 +82,50 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     {''.join(f"<tr><td>{pred['Datetime']}</td><td>${pred['Predicted_Price']:.2f}</td><td>{pred['Confidence']:.2%}</td></tr>" for pred in predictions)}
                 </table>
                 <p>Note: Only predictions with confidence level of 70% or higher are shown.</p>
+                
+                <h2>AI Learning Progress:</h2>
+                <div class="chart-container">
+                    <canvas id="learningProgressChart"></canvas>
+                </div>
+                
+                <script>
+                    var ctx = document.getElementById('learningProgressChart').getContext('2d');
+                    var chart = new Chart(ctx, {{
+                        type: 'line',
+                        data: {{
+                            labels: Array.from({{length: {len(learning_progress.get('prediction_accuracy', []))}}}, (_, i) => i + 1),
+                            datasets: [
+                                {{
+                                    label: 'Prediction Accuracy',
+                                    data: {json.dumps(learning_progress.get('prediction_accuracy', []))},
+                                    borderColor: 'rgb(75, 192, 192)',
+                                    tension: 0.1
+                                }},
+                                {{
+                                    label: 'Portfolio Value',
+                                    data: {json.dumps(learning_progress.get('portfolio_value', []))},
+                                    borderColor: 'rgb(255, 99, 132)',
+                                    tension: 0.1
+                                }},
+                                {{
+                                    label: 'Model Confidence',
+                                    data: {json.dumps(learning_progress.get('model_confidence', []))},
+                                    borderColor: 'rgb(54, 162, 235)',
+                                    tension: 0.1
+                                }}
+                            ]
+                        }},
+                        options: {{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {{
+                                y: {{
+                                    beginAtZero: true
+                                }}
+                            }}
+                        }}
+                    }});
+                </script>
             </body>
             </html>
             """
