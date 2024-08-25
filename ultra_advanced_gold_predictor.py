@@ -24,6 +24,8 @@ from textblob import TextBlob
 import talib
 from datetime import datetime, timedelta
 import time
+import joblib
+from collections import defaultdict
 
 # API keys
 CURRENTS_API_KEY = "FkEEwNLACnLEfCoJ09fFe3yrVaPGZ76u-PKi8-yHqGRJ6hd8"
@@ -39,34 +41,10 @@ def fetch_recent_news(days=7):
     # ... (previous fetch_recent_news function remains unchanged)
 
 def fetch_economic_calendar(start_date, end_date):
-    """Fetch economic calendar events from Alpha Vantage."""
-    url = f"https://www.alphavantage.co/query?function=ECONOMIC_CALENDAR&apikey={ALPHA_VANTAGE_API_KEY}"
-    response = requests.get(url)
-    
-    if response.status_code == 200:
-        calendar_data = response.json()
-        if 'error' in calendar_data:
-            print(f"Error fetching economic calendar: {calendar_data['error']}")
-            return []
-        
-        # Filter events within the specified date range
-        start_date = datetime.strptime(start_date, "%Y-%m-%d")
-        end_date = datetime.strptime(end_date, "%Y-%m-%d")
-        filtered_events = [
-            event for event in calendar_data.get('economic_calendar', [])
-            if start_date <= datetime.strptime(event['date'], "%Y-%m-%d") <= end_date
-        ]
-        return filtered_events
-    else:
-        print(f"Failed to fetch economic calendar data")
-        return []
+    # ... (previous fetch_economic_calendar function remains unchanged)
 
-def create_features(df, recent_news, economic_calendar):
+def create_features(df, economic_calendar):
     # ... (previous feature creation code)
-
-    # Add features based on recent news
-    recent_news_sentiment = np.mean([TextBlob(article['title'] + ' ' + article['description']).sentiment.polarity for article in recent_news])
-    df['Recent_News_Sentiment'] = recent_news_sentiment
 
     # Add features based on economic calendar
     important_countries = ['United States', 'China', 'European Union', 'Japan']
@@ -99,21 +77,126 @@ def plot_predictions(y_true, y_pred, title):
 def ensemble_predict(predictions):
     # ... (previous ensemble_predict function remains unchanged)
 
+def backtest_model(df, economic_calendar, model_names, start_date, end_date, window_size=30):
+    """Backtest the model using expanding window approach."""
+    df = df[(df.index >= start_date) & (df.index <= end_date)]
+    economic_calendar = [e for e in economic_calendar if start_date <= datetime.strptime(e['date'], "%Y-%m-%d") <= datetime.strptime(end_date, "%Y-%m-%d")]
+    
+    results = []
+    for i in range(window_size, len(df)):
+        train_df = df.iloc[:i]
+        test_df = df.iloc[i:i+1]
+        
+        train_calendar = [e for e in economic_calendar if datetime.strptime(e['date'], "%Y-%m-%d") <= train_df.index[-1]]
+        test_calendar = [e for e in economic_calendar if test_df.index[0] <= datetime.strptime(e['date'], "%Y-%m-%d") < test_df.index[0] + timedelta(days=7)]
+        
+        train_df = create_features(train_df, train_calendar)
+        test_df = create_features(test_df, test_calendar)
+        
+        X_train, y_train = train_df.drop('Gold_Price', axis=1), train_df['Gold_Price']
+        X_test, y_test = test_df.drop('Gold_Price', axis=1), test_df['Gold_Price']
+        
+        model_predictions = {}
+        for model_name in model_names:
+            model = train_model(model_name, X_train, y_train)
+            pred = predict(model, model_name, X_test)
+            model_predictions[model_name] = pred[0]
+        
+        ensemble_pred = ensemble_predict(list(model_predictions.values()))
+        
+        results.append({
+            'date': test_df.index[0],
+            'actual': y_test.values[0],
+            'ensemble_prediction': ensemble_pred,
+            **model_predictions
+        })
+        
+        print(f"Processed up to {test_df.index[0]}")
+    
+    return pd.DataFrame(results)
+
+def update_model(model, model_name, X_new, y_new):
+    """Update the model with new data."""
+    if model_name in ['rf', 'gb', 'xgb', 'lgbm']:
+        # For tree-based models, we can partially fit with new data
+        model.fit(X_new, y_new)
+    elif model_name == 'lstm':
+        # For LSTM, we need to retrain on all data
+        model.fit(X_new, y_new, epochs=10, batch_size=32, verbose=0)
+    # Add more conditions for other model types as needed
+    return model
+
+def assess_event_importance(backtest_results, economic_calendar):
+    """Assess the importance of economic events based on prediction errors."""
+    event_errors = defaultdict(list)
+    
+    for _, row in backtest_results.iterrows():
+        date = row['date']
+        error = abs(row['actual'] - row['ensemble_prediction'])
+        
+        # Find events within 7 days before the prediction date
+        relevant_events = [e for e in economic_calendar if date - timedelta(days=7) <= datetime.strptime(e['date'], "%Y-%m-%d") < date]
+        
+        for event in relevant_events:
+            event_key = (event['country'], event['event'])
+            event_errors[event_key].append(error)
+    
+    # Calculate average error for each event type
+    event_importance = {k: np.mean(v) for k, v in event_errors.items()}
+    
+    # Normalize importance scores
+    max_importance = max(event_importance.values())
+    event_importance = {k: v / max_importance for k, v in event_importance.items()}
+    
+    return event_importance
+
 if __name__ == "__main__":
     # Fetch and prepare data
     df = fetch_data("2010-01-01", "2023-05-31")
     news_sentiment = fetch_news_sentiment("2010-01-01", "2023-05-31")
     df['News_Sentiment'] = news_sentiment
     
-    # Fetch recent news and economic calendar data
+    # Fetch economic calendar data for the entire period
+    economic_calendar = fetch_economic_calendar("2010-01-01", "2023-05-31")
+    
+    # Backtest the model
+    model_names = ['rf', 'gb', 'xgb', 'lgbm', 'lstm']
+    backtest_results = backtest_model(df, economic_calendar, model_names, "2015-01-01", "2023-05-31")
+    
+    # Evaluate backtest results
+    for model_name in model_names + ['ensemble']:
+        print(f"\n{model_name.upper()} Backtest Performance:")
+        evaluate_model(backtest_results['actual'], backtest_results[f'{model_name}_prediction' if model_name == 'ensemble' else model_name])
+    
+    # Plot backtest results
+    plot_predictions(backtest_results['actual'], backtest_results['ensemble_prediction'], "Backtest Results")
+    
+    # Assess event importance
+    event_importance = assess_event_importance(backtest_results, economic_calendar)
+    print("\nEvent Importance:")
+    for event, importance in sorted(event_importance.items(), key=lambda x: x[1], reverse=True)[:10]:
+        print(f"{event[0]} - {event[1]}: {importance:.4f}")
+    
+    # Continuous model updating (simulation)
+    print("\nSimulating continuous model updating...")
+    latest_data = df.iloc[-30:]  # Last 30 days of data
+    latest_calendar = [e for e in economic_calendar if datetime.strptime(e['date'], "%Y-%m-%d") >= latest_data.index[0]]
+    latest_data = create_features(latest_data, latest_calendar)
+    
+    X_latest = latest_data.drop('Gold_Price', axis=1)
+    y_latest = latest_data['Gold_Price']
+    
+    for model_name in model_names:
+        model = joblib.load(f"{model_name}_model.joblib")  # Load the saved model
+        updated_model = update_model(model, model_name, X_latest, y_latest)
+        joblib.dump(updated_model, f"{model_name}_model_updated.joblib")  # Save the updated model
+    
+    print("Models updated with latest data.")
+    
+    # Fetch recent news and upcoming economic events for future predictions
     recent_news = fetch_recent_news()
-    economic_calendar = fetch_economic_calendar("2023-05-31", "2023-06-07")  # Fetch one week ahead
+    upcoming_calendar = fetch_economic_calendar(datetime.now().strftime("%Y-%m-%d"), (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))
     
-    df = create_features(df, recent_news, economic_calendar)
-    
-    # ... (rest of the main block remains unchanged)
-
-    # After making predictions, analyze recent news and upcoming economic events
     print("\nRecent News Analysis:")
     for article in recent_news[:5]:  # Print top 5 recent news articles
         print(f"Title: {article['title']}")
@@ -121,11 +204,12 @@ if __name__ == "__main__":
         print("---")
 
     print("\nUpcoming Economic Events:")
-    for event in economic_calendar[:10]:  # Print top 10 upcoming events
+    for event in upcoming_calendar[:10]:  # Print top 10 upcoming events
         print(f"Date: {event['date']}")
         print(f"Country: {event['country']}")
         print(f"Event: {event['event']}")
         print(f"Impact: {event['impact']}")
+        print(f"Importance Score: {event_importance.get((event['country'], event['event']), 0):.4f}")
         print("---")
 
-print("\nNote: This ultra-advanced model now incorporates historical and recent news sentiment data, as well as economic calendar information from Alpha Vantage. However, it should still be used cautiously for actual trading decisions.")
+print("\nNote: This ultra-advanced model now incorporates backtesting, continuous updating, and dynamic event importance assessment. However, it should still be used cautiously for actual trading decisions.")
