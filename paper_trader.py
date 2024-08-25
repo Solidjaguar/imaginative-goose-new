@@ -59,8 +59,8 @@ class PaperTrader:
     def get_portfolio_value(self, current_price):
         return self.balance + (self.gold_holdings * current_price)
 
-    def get_recent_trades(self, days=7):
-        cutoff_date = datetime.now() - timedelta(days=days)
+    def get_recent_trades(self, hours=24):
+        cutoff_date = datetime.now() - timedelta(hours=hours)
         return [trade for trade in self.trades if datetime.fromisoformat(trade['date']) > cutoff_date]
 
     def get_state(self):

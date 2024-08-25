@@ -33,6 +33,12 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
                     th {{ background-color: #4CAF50; color: white; }}
                 </style>
+                <script>
+                    function refreshPage() {{
+                        location.reload();
+                    }}
+                    setInterval(refreshPage, 60000); // Refresh every 60 seconds
+                </script>
             </head>
             <body>
                 <h1>Ultra Advanced Gold Price Predictor and Paper Trader</h1>
@@ -41,7 +47,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
                 <p>Portfolio Value: <span class="value">${portfolio_value:.2f}</span></p>
                 <p>Cash Balance: <span class="value">${balance:.2f}</span></p>
                 <p>Gold Holdings: <span class="value">{gold_holdings:.2f} oz</span></p>
-                <h2>Recent Trades:</h2>
+                <h2>Recent Trades (Last 24 Hours):</h2>
                 <table>
                     <tr>
                         <th>Date</th>
@@ -49,16 +55,16 @@ class RequestHandler(SimpleHTTPRequestHandler):
                         <th>Price</th>
                         <th>Amount</th>
                     </tr>
-                    {''.join(f"<tr><td>{trade['date']}</td><td>{trade['type']}</td><td>${trade['price']:.2f}</td><td>{trade['amount']:.2f} oz</td></tr>" for trade in recent_trades)}
+                    {''.join(f"<tr><td>{trade['date']}</td><td>{trade['type']}</td><td>${trade['price']:.2f}</td><td>{trade['amount']:.4f} oz</td></tr>" for trade in recent_trades)}
                 </table>
-                <h2>Price Predictions with High Confidence:</h2>
+                <h2>Short-term Price Predictions (Next Hour):</h2>
                 <table>
                     <tr>
-                        <th>Date</th>
+                        <th>Datetime</th>
                         <th>Predicted Price</th>
                         <th>Confidence</th>
                     </tr>
-                    {''.join(f"<tr><td>{pred['Date']}</td><td>${pred['Predicted_Price']:.2f}</td><td>{pred['Confidence']:.2%}</td></tr>" for pred in predictions)}
+                    {''.join(f"<tr><td>{pred['Datetime']}</td><td>${pred['Predicted_Price']:.2f}</td><td>{pred['Confidence']:.2%}</td></tr>" for pred in predictions)}
                 </table>
                 <p>Note: Only predictions with confidence level of 70% or higher are shown.</p>
             </body>
