@@ -1,59 +1,23 @@
 import os
 
-# API Keys
-FRED_API_KEY = os.getenv('FRED_API_KEY', 'YOUR_FRED_API_KEY')
-NEWS_API_KEY = os.getenv('NEWS_API_KEY', 'YOUR_NEWS_API_KEY')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Data parameters
-LOOKBACK_DAYS = 30
-TRAIN_TEST_SPLIT = 0.8
+# Data directories
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
 
-# Model parameters
-LSTM_UNITS = 64
-LSTM_DROPOUT = 0.2
-LSTM_DENSE_UNITS = 32
-LSTM_LEARNING_RATE = 0.001
-LSTM_EPOCHS = 100
-LSTM_BATCH_SIZE = 32
+# API keys (replace with your actual keys)
+ALPHA_VANTAGE_API_KEY = 'your_alpha_vantage_api_key'
+FRED_API_KEY = 'your_fred_api_key'
 
-# Ensemble model names
-MODEL_NAMES = ['rf', 'xgb', 'lgbm', 'elasticnet']
+# Model file paths
+RANDOM_FOREST_MODEL_PATH = os.path.join(MODELS_DIR, 'random_forest_model.joblib')
+LASSO_MODEL_PATH = os.path.join(MODELS_DIR, 'lasso_model.joblib')
+SVR_MODEL_PATH = os.path.join(MODELS_DIR, 'svr_model.joblib')
+XGB_MODEL_PATH = os.path.join(MODELS_DIR, 'xgb_model.joblib')
+LGBM_MODEL_PATH = os.path.join(MODELS_DIR, 'lgbm_model.joblib')
+LSTM_MODEL_PATH = os.path.join(MODELS_DIR, 'lstm_model.h5')
 
-# Feature selection
-N_FEATURES_TO_SELECT = 30
-
-# Anomaly detection
-ANOMALY_CONTAMINATION = 0.1
-
-# Prediction interval confidence
-PREDICTION_INTERVAL_CONFIDENCE = 0.95
-
-# Retraining schedule
-RETRAIN_TIME = "00:00"  # Midnight
-
-# Caching
-CACHE_EXPIRY = 86400  # 24 hours in seconds
-
-# Database
-DB_NAME = 'performance_metrics.db'
-
-# Symbols
-GOLD_SYMBOL = "GC=F"
-RELATED_ASSETS = [('Silver', "SI=F"), ('Oil', "CL=F"), ('SP500', "^GSPC")]
-
-# FRED Indicators
-FRED_INDICATORS = {
-    'CPIAUCSL': 'Inflation_Rate',
-    'FEDFUNDS': 'Interest_Rate',
-    'DTWEXBGS': 'USD_Index',
-    'GDP': 'GDP',
-    'UNRATE': 'Unemployment_Rate'
-}
-
-# File paths
-CHECKPOINT_FILE = 'model_checkpoint.joblib'
-CACHE_DIR = 'cache'
-
-# Logging
-LOG_LEVEL = 'INFO'
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
+# Other configuration settings
+LOOK_BACK_PERIOD = 30
+PREDICTION_DAYS = 7
