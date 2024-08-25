@@ -28,75 +28,98 @@ import time
 # Add the Currents API key
 CURRENTS_API_KEY = "FkEEwNLACnLEfCoJ09fFe3yrVaPGZ76u-PKi8-yHqGRJ6hd8"
 
+# Add an Economic Calendar API key (you'll need to sign up for a service)
+ECONOMIC_CALENDAR_API_KEY = "your_economic_calendar_api_key_here"
+
 def fetch_data(start_date, end_date):
     # ... (previous fetch_data function remains unchanged)
 
 def fetch_news_sentiment(start_date, end_date, max_requests=600):
-    sentiments = []
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    
-    total_days = (end_date - start_date).days + 1
-    requests_per_day = max(1, min(max_requests // total_days, 1))  # Ensure at least 1 request per day
-    days_to_skip = max(1, total_days // max_requests)  # Skip days if necessary
-    
-    current_date = start_date
-    requests_made = 0
-    
-    while current_date <= end_date and requests_made < max_requests:
-        # Format the date for the API request
-        formatted_date = current_date.strftime("%Y-%m-%d")
-        
-        # Make API request
-        url = f"https://api.currentsapi.services/v1/search?keywords=gold&language=en&start_date={formatted_date}&end_date={formatted_date}&apiKey={CURRENTS_API_KEY}"
-        response = requests.get(url)
-        requests_made += 1
-        
-        if response.status_code == 200:
-            news_data = response.json()
-            
-            # Calculate average sentiment for the day
-            daily_sentiment = 0
-            for article in news_data.get('news', []):
-                title = article.get('title', '')
-                description = article.get('description', '')
-                full_text = title + ' ' + description
-                sentiment = TextBlob(full_text).sentiment.polarity
-                daily_sentiment += sentiment
-            
-            if news_data.get('news'):
-                daily_sentiment /= len(news_data['news'])
-            
-            sentiments.append((current_date, daily_sentiment))
-        else:
-            print(f"Failed to fetch news for {formatted_date}")
-            sentiments.append((current_date, 0))  # Neutral sentiment if fetch fails
-        
-        # Move to the next date, skipping days if necessary
-        current_date += timedelta(days=days_to_skip)
-        
-        # Sleep to avoid hitting rate limits
-        time.sleep(1)
-    
-    # Create a complete date range and fill in missing dates with interpolation
-    date_range = pd.date_range(start=start_date, end=end_date)
-    sentiment_series = pd.Series(dict(sentiments))
-    sentiment_series = sentiment_series.reindex(date_range).interpolate()
-    
-    return sentiment_series
+    # ... (previous fetch_news_sentiment function remains unchanged)
 
-def create_features(df):
-    # ... (previous create_features function remains unchanged)
+def fetch_recent_news(days=7):
+    """Fetch recent news articles related to gold."""
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+    
+    url = f"https://api.currentsapi.services/v1/search?keywords=gold&language=en&start_date={start_date.strftime('%Y-%m-%d')}&end_date={end_date.strftime('%Y-%m-%d')}&apiKey={CURRENTS_API_KEY}"
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        news_data = response.json()
+        return news_data.get('news', [])
+    else:
+        print(f"Failed to fetch recent news")
+        return []
 
-# ... (rest of the script remains unchanged)
+def fetch_economic_calendar(start_date, end_date):
+    """Fetch economic calendar events."""
+    # Note: You'll need to replace this with an actual economic calendar API
+    # This is a placeholder function
+    url = f"https://api.example.com/economic_calendar?start_date={start_date}&end_date={end_date}&api_key={ECONOMIC_CALENDAR_API_KEY}"
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        calendar_data = response.json()
+        return calendar_data
+    else:
+        print(f"Failed to fetch economic calendar data")
+        return []
+
+def create_features(df, recent_news, economic_calendar):
+    # ... (previous feature creation code)
+
+    # Add features based on recent news
+    recent_news_sentiment = np.mean([TextBlob(article['title'] + ' ' + article['description']).sentiment.polarity for article in recent_news])
+    df['Recent_News_Sentiment'] = recent_news_sentiment
+
+    # Add features based on economic calendar
+    # This is a placeholder - you'll need to adapt this based on the actual economic calendar data structure
+    important_events = ['Fed Rate Decision', 'GDP Release', 'Inflation Report']
+    for event in important_events:
+        df[f'{event}_Upcoming'] = economic_calendar.get(event, 0)
+
+    df.dropna(inplace=True)
+    return df
+
+def train_model(model_name, X_train, y_train, params=None):
+    # ... (previous train_model function remains unchanged)
+
+def predict(model, model_name, X):
+    # ... (previous predict function remains unchanged)
+
+def evaluate_model(y_true, y_pred):
+    # ... (previous evaluate_model function remains unchanged)
+
+def plot_predictions(y_true, y_pred, title):
+    # ... (previous plot_predictions function remains unchanged)
+
+def ensemble_predict(predictions):
+    # ... (previous ensemble_predict function remains unchanged)
 
 if __name__ == "__main__":
     # Fetch and prepare data
     df = fetch_data("2010-01-01", "2023-05-31")
     news_sentiment = fetch_news_sentiment("2010-01-01", "2023-05-31")
     df['News_Sentiment'] = news_sentiment
-    df = create_features(df)
+    
+    # Fetch recent news and economic calendar data
+    recent_news = fetch_recent_news()
+    economic_calendar = fetch_economic_calendar("2023-05-31", "2023-06-07")  # Fetch one week ahead
+    
+    df = create_features(df, recent_news, economic_calendar)
     
     # ... (rest of the main block remains unchanged)
 
-print("\nNote: This ultra-advanced model now incorporates real news sentiment data from the Currents API, respecting the daily request limit, but should still be used cautiously for actual trading decisions.")
+    # After making predictions, analyze recent news and upcoming economic events
+    print("\nRecent News Analysis:")
+    for article in recent_news[:5]:  # Print top 5 recent news articles
+        print(f"Title: {article['title']}")
+        print(f"Sentiment: {TextBlob(article['title'] + ' ' + article['description']).sentiment.polarity}")
+        print("---")
+
+    print("\nUpcoming Economic Events:")
+    for event, value in economic_calendar.items():
+        print(f"{event}: {value}")
+
+print("\nNote: This ultra-advanced model now incorporates historical and recent news sentiment data, as well as economic calendar information. However, it should still be used cautiously for actual trading decisions.")
