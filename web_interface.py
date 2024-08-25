@@ -79,6 +79,13 @@ def load_paper_trading_results():
     except FileNotFoundError:
         return None
 
+def load_performance_report():
+    try:
+        with open('performance_report.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
 @app.route('/')
 def index():
     predictions = load_predictions()
@@ -87,17 +94,23 @@ def index():
     cv_scores = load_cv_scores()
     feature_importance = load_feature_importance()
     paper_trading_results = load_paper_trading_results()
+    performance_report = load_performance_report()
     return render_template('index.html', predictions=predictions, plot_url=plot_url, metrics=metrics, 
                            cv_scores=cv_scores, feature_importance=feature_importance, 
-                           paper_trading_results=paper_trading_results)
+                           paper_trading_results=paper_trading_results,
+                           performance_report=performance_report)
 
 @app.route('/paper_trading_update')
 def paper_trading_update():
     paper_trading_results = load_paper_trading_results()
-    if paper_trading_results:
-        return jsonify(paper_trading_results)
+    performance_report = load_performance_report()
+    if paper_trading_results and performance_report:
+        return jsonify({
+            'paper_trading_results': paper_trading_results,
+            'performance_report': performance_report
+        })
     else:
-        return jsonify({'error': 'No paper trading results available'})
+        return jsonify({'error': 'No paper trading results or performance report available'})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

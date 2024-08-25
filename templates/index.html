@@ -81,6 +81,14 @@
     <h2>Paper Trading Results</h2>
     <div id="paperTradingChart"></div>
     
+    <h2>Performance Metrics</h2>
+    <table id="performanceMetrics">
+        <tr>
+            <th>Metric</th>
+            <th>Value</th>
+        </tr>
+    </table>
+    
     <h2>Latest Trade History</h2>
     <table id="tradeHistory">
         <tr>
@@ -147,8 +155,8 @@
                     
                     // Update portfolio value chart
                     var trace = {
-                        x: data.portfolio_values.map(d => d.timestamp),
-                        y: data.portfolio_values.map(d => d.value),
+                        x: data.paper_trading_results.portfolio_values.map(d => d.timestamp),
+                        y: data.paper_trading_results.portfolio_values.map(d => d.value),
                         type: 'scatter'
                     };
                     var layout = {
@@ -170,7 +178,7 @@
                             <th>Cost</th>
                         </tr>
                     `;
-                    data.trade_history.slice(-10).forEach(trade => {
+                    data.paper_trading_results.trade_history.slice(-10).forEach(trade => {
                         var row = tradeHistoryTable.insertRow(-1);
                         row.insertCell(0).textContent = trade.timestamp;
                         row.insertCell(1).textContent = trade.currency_pair;
@@ -179,6 +187,20 @@
                         row.insertCell(4).textContent = trade.price.toFixed(4);
                         row.insertCell(5).textContent = trade.cost.toFixed(4);
                     });
+                    
+                    // Update performance metrics table
+                    var performanceMetricsTable = document.getElementById('performanceMetrics');
+                    performanceMetricsTable.innerHTML = `
+                        <tr>
+                            <th>Metric</th>
+                            <th>Value</th>
+                        </tr>
+                    `;
+                    for (let [metric, value] of Object.entries(data.performance_report)) {
+                        var row = performanceMetricsTable.insertRow(-1);
+                        row.insertCell(0).textContent = metric;
+                        row.insertCell(1).textContent = typeof value === 'number' ? value.toFixed(4) : value;
+                    }
                 });
         }
         

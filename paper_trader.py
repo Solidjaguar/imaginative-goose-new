@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 import json
 import logging
 import time
-from gold_forex_predictor import fetch_all_data, prepare_data, add_technical_indicators, train_model
-from trading_strategy import advanced_trading_strategy, apply_risk_management, calculate_indicators
+from gold_forex_predictor import fetch_all_data, prepare_data, add_technical_indicators
+from trading_strategy import calculate_indicators, combined_strategy, optimize_strategy, apply_risk_management, calculate_position_size
+from performance_metrics import generate_performance_report
 
 logging.basicConfig(filename='paper_trader.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,6 +20,9 @@ class PaperTrader:
         self.slippage = slippage
         self.trade_history = []
         self.portfolio_values = []
+        self.strategy = combined_strategy
+        self.optimization_interval = 30  # Optimize strategy every 30 days
+        self.performance_report_interval = 7  # Generate performance report every 7 days
 
     def execute_trade(self, currency_pair, action, amount, price):
         cost = amount * price * (1 + self.transaction_cost + self.slippage)
@@ -60,17 +64,48 @@ class PaperTrader:
             portfolio_value += amount * current_prices[currency_pair]
         return portfolio_value
 
+    def optimize_strategy(self, historical_data):
+        self.strategy = optimize_strategy(historical_data, self.trade_history)
+        logging.info("Strategy optimized based on historical data and paper trading results")
+
+    def generate_performance_report(self, historical_data):
+        portfolio_values = pd.DataFrame(self.portfolio_values)
+        portfolio_values['timestamp'] = pd.to_datetime(portfolio_values['timestamp'])
+        portfolio_values.set_index('timestamp', inplace=True)
+        portfolio_returns = portfolio_values['value'].pct_change().dropna()
+
+        benchmark_returns = historical_data['EUR/USD_returns']  # Using EUR/USD as benchmark
+        benchmark_returns = benchmark_returns[benchmark_returns.index.isin(portfolio_returns.index)]
+
+        report = generate_performance_report(portfolio_returns, benchmark_returns)
+        
+        with open('performance_report.json', 'w') as f:
+            json.dump(report.to_dict(), f)
+        
+        logging.info("Performance report generated and saved")
+
     def run_paper_trading(self):
-        model = train_model()  # Train the initial model
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365)  # Use 1 year of historical data
+        
+        data = fetch_all_data(start_date, end_date)
+        X, y = prepare_data(data)
+        
+        last_optimization = datetime.now()
+        last_performance_report = datetime.now()
         
         while True:
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=1)  # Fetch the last day of data
+            current_time = datetime.now()
             
-            data = fetch_all_data(start_date, end_date)
-            X, y = prepare_data(data)
+            # Optimize strategy every 30 days
+            if (current_time - last_optimization).days >= self.optimization_interval:
+                self.optimize_strategy(pd.concat([X, y], axis=1))
+                last_optimization = current_time
             
-            predictions = model.predict(X)
+            # Generate performance report every 7 days
+            if (current_time - last_performance_report).days >= self.performance_report_interval:
+                self.generate_performance_report(pd.concat([X, y], axis=1))
+                last_performance_report = current_time
             
             current_prices = {
                 'EUR/USD': data['EUR/USD'].iloc[-1],
@@ -80,19 +115,20 @@ class PaperTrader:
             
             indicators = calculate_indicators(pd.Series(current_prices))
             
-            for i, currency_pair in enumerate(['EUR/USD', 'GBP/USD', 'JPY/USD']):
-                suggested_position = advanced_trading_strategy(indicators.iloc[-1], self.positions[currency_pair])
+            for currency_pair in ['EUR/USD', 'GBP/USD', 'JPY/USD']:
+                suggested_position = self.strategy(indicators.iloc[-1], self.positions[currency_pair], current_prices[currency_pair])
                 position = apply_risk_management(suggested_position, self.entry_prices[currency_pair], current_prices[currency_pair])
                 
                 if position != self.positions[currency_pair]:
+                    trade_amount = calculate_position_size(self.balance)
                     if position > self.positions[currency_pair]:
-                        self.execute_trade(currency_pair, 'buy', position - self.positions[currency_pair], current_prices[currency_pair])
+                        self.execute_trade(currency_pair, 'buy', trade_amount, current_prices[currency_pair])
                     else:
-                        self.execute_trade(currency_pair, 'sell', self.positions[currency_pair] - position, current_prices[currency_pair])
+                        self.execute_trade(currency_pair, 'sell', trade_amount, current_prices[currency_pair])
             
             portfolio_value = self.get_portfolio_value(current_prices)
             self.portfolio_values.append({
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': current_time.isoformat(),
                 'value': portfolio_value
             })
             
@@ -104,9 +140,13 @@ class PaperTrader:
             # Wait for 1 hour before the next iteration
             time.sleep(3600)
             
-            # Retrain the model every 24 hours
-            if len(self.portfolio_values) % 24 == 0:
-                model = train_model()
+            # Fetch new data
+            new_data = fetch_all_data(end_date, current_time)
+            data = pd.concat([data, new_data])
+            X_new, y_new = prepare_data(new_data)
+            X = pd.concat([X, X_new])
+            y = pd.concat([y, y_new])
+            end_date = current_time
 
     def save_state(self):
         state = {

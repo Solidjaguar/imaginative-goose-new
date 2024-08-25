@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import io
 import base64
 import logging
+from trading_strategy import calculate_indicators
 
 logging.basicConfig(filename='gold_forex_predictor.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,35 +42,19 @@ def prepare_data(data):
     df = pd.DataFrame(data)
     df.dropna(inplace=True)
 
-    df['Gold_returns'] = df['Gold'].pct_change()
-    df['EURUSD_returns'] = df['EUR/USD'].pct_change()
-    df['GBPUSD_returns'] = df['GBP/USD'].pct_change()
-    df['JPYUSD_returns'] = df['JPY/USD'].pct_change()
+    for column in df.columns:
+        df[f'{column}_returns'] = df[column].pct_change()
 
-    df = add_technical_indicators(df)
+    indicators = calculate_indicators(df)
+    df = pd.concat([df, indicators], axis=1)
 
-    X = df[['Gold_returns', 'EURUSD_returns', 'GBPUSD_returns', 'JPYUSD_returns',
-            'Gold_SMA', 'Gold_RSI', 'EURUSD_SMA', 'EURUSD_RSI',
-            'GBPUSD_SMA', 'GBPUSD_RSI', 'JPYUSD_SMA', 'JPYUSD_RSI']].dropna()
-    y = df[['EURUSD_returns', 'GBPUSD_returns', 'JPYUSD_returns']].shift(-1).dropna()
+    X = df.drop(['Gold', 'EUR/USD', 'GBP/USD', 'JPY/USD'], axis=1).dropna()
+    y = df[['EUR/USD_returns', 'GBP/USD_returns', 'JPY/USD_returns']].shift(-1).dropna()
 
     X = X[:-1]
     y = y[:-1]
 
     return X, y
-
-def add_technical_indicators(df):
-    for column in ['Gold', 'EUR/USD', 'GBP/USD', 'JPY/USD']:
-        df[f'{column}_SMA'] = df[column].rolling(window=20).mean() / df[column] - 1
-        df[f'{column}_RSI'] = calculate_rsi(df[column])
-    return df
-
-def calculate_rsi(prices, period=14):
-    delta = prices.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
 
 def train_model():
     data = fetch_all_data()
@@ -108,7 +93,7 @@ def train_model():
     plt.title('Feature Importance')
     plt.xlabel('Features')
     plt.ylabel('Importance')
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=90)
     plt.tight_layout()
 
     img = io.BytesIO()
