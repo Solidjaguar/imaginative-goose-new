@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.preprocessing import StandardScaler
 import yfinance as yf
 from datetime import datetime, timedelta
 import json
@@ -9,19 +8,23 @@ import matplotlib.pyplot as plt
 import io
 import base64
 import logging
-from trading_strategy import calculate_indicators
-from ensemble_model import EnsembleModel, train_ensemble_model
-from ta.trend import MACD, SMAIndicator
-from ta.momentum import RSIIndicator
-from ta.volatility import BollingerBands
+from ta.trend import MACD, SMAIndicator, EMAIndicator, IchimokuIndicator
+from ta.momentum import RSIIndicator, StochasticOscillator
+from ta.volatility import BollingerBands, AverageTrueRange
+from ta.volume import OnBalanceVolumeIndicator
 from nltk.sentiment import SentimentIntensityAnalyzer
 import nltk
 import requests
+from alpha_vantage.timeseries import TimeSeries
+from alpha_vantage.foreignexchange import ForeignExchange
 
-nltk.download('vader_lexicon')
+nltk.download('vader_lexicon', quiet=True)
 
 logging.basicConfig(filename='gold_forex_predictor.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Replace with your actual API key
+ALPHA_VANTAGE_API_KEY = "YOUR_ALPHA_VANTAGE_API_KEY"
 
 def fetch_all_data(start_date=None, end_date=None):
     if start_date is None:
@@ -47,15 +50,26 @@ def fetch_all_data(start_date=None, end_date=None):
     }
 
 def fetch_economic_indicators(start_date, end_date):
-    # This is a placeholder function. In a real-world scenario, you would use an API
-    # to fetch economic indicators like GDP, inflation rates, interest rates, etc.
-    # For this example, we'll generate random data
-    date_range = pd.date_range(start=start_date, end=end_date)
-    indicators = pd.DataFrame({
-        'GDP_growth': np.random.normal(2, 0.5, len(date_range)),
-        'Inflation_rate': np.random.normal(2, 0.3, len(date_range)),
-        'Interest_rate': np.random.normal(1, 0.2, len(date_range)),
-    }, index=date_range)
+    # Use Alpha Vantage API to fetch real economic indicators
+    ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+    fx = ForeignExchange(key=ALPHA_VANTAGE_API_KEY)
+
+    # Fetch GDP growth rate (quarterly)
+    gdp_data, _ = ts.get_global_quote('GDP')
+    
+    # Fetch inflation rate (monthly)
+    cpi_data, _ = ts.get_global_quote('CPI')
+    
+    # Fetch interest rates (daily)
+    interest_rate_data, _ = fx.get_currency_exchange_daily('USD', 'EUR')  # Using EUR/USD as a proxy for interest rate differentials
+
+    # Combine and resample data to daily frequency
+    indicators = pd.concat([gdp_data, cpi_data, interest_rate_data], axis=1)
+    indicators = indicators.resample('D').ffill()
+    
+    # Trim to the specified date range
+    indicators = indicators.loc[start_date:end_date]
+
     return indicators
 
 def fetch_news_sentiment(start_date, end_date):
@@ -69,7 +83,6 @@ def fetch_news_sentiment(start_date, end_date):
     return sentiment
 
 def add_advanced_features(df):
-    # Technical indicators
     for column in ['Gold', 'EUR/USD', 'GBP/USD', 'JPY/USD']:
         # MACD
         macd = MACD(close=df[column])
@@ -77,9 +90,11 @@ def add_advanced_features(df):
         df[f'{column}_MACD_signal'] = macd.macd_signal()
         df[f'{column}_MACD_diff'] = macd.macd_diff()
 
-        # SMA
+        # SMA and EMA
         sma = SMAIndicator(close=df[column], window=14)
+        ema = EMAIndicator(close=df[column], window=14)
         df[f'{column}_SMA'] = sma.sma_indicator()
+        df[f'{column}_EMA'] = ema.ema_indicator()
 
         # RSI
         rsi = RSIIndicator(close=df[column])
@@ -89,6 +104,34 @@ def add_advanced_features(df):
         bb = BollingerBands(close=df[column])
         df[f'{column}_BB_high'] = bb.bollinger_hband()
         df[f'{column}_BB_low'] = bb.bollinger_lband()
+
+        # Stochastic Oscillator
+        stoch = StochasticOscillator(high=df[column], low=df[column], close=df[column])
+        df[f'{column}_Stoch_k'] = stoch.stoch()
+        df[f'{column}_Stoch_d'] = stoch.stoch_signal()
+
+        # Ichimoku Cloud
+        ichimoku = IchimokuIndicator(high=df[column], low=df[column])
+        df[f'{column}_Ichimoku_a'] = ichimoku.ichimoku_a()
+        df[f'{column}_Ichimoku_b'] = ichimoku.ichimoku_b()
+
+        # Average True Range
+        atr = AverageTrueRange(high=df[column], low=df[column], close=df[column])
+        df[f'{column}_ATR'] = atr.average_true_range()
+
+        # On-Balance Volume (assuming we have volume data, which we don't for forex)
+        if 'Volume' in df.columns:
+            obv = OnBalanceVolumeIndicator(close=df[column], volume=df['Volume'])
+            df[f'{column}_OBV'] = obv.on_balance_volume()
+
+    # Correlation features
+    df['Gold_EURUSD_corr'] = df['Gold'].rolling(window=30).corr(df['EUR/USD'])
+    df['Gold_GBPUSD_corr'] = df['Gold'].rolling(window=30).corr(df['GBP/USD'])
+    df['Gold_JPYUSD_corr'] = df['Gold'].rolling(window=30).corr(df['JPY/USD'])
+
+    # Volatility features
+    for column in ['Gold', 'EUR/USD', 'GBP/USD', 'JPY/USD']:
+        df[f'{column}_volatility'] = df[column].pct_change().rolling(window=30).std()
 
     # Lagged features
     for column in df.columns:
@@ -124,7 +167,7 @@ def train_model():
     news_sentiment = fetch_news_sentiment(data.index[0], data.index[-1])
     X, y = prepare_data(data, economic_indicators, news_sentiment)
 
-    model = train_ensemble_model(X, y)
+    model = train_stacking_ensemble_model(X, y)
 
     # Generate feature importance plot
     feature_importance = model.rf_model.feature_importances_
