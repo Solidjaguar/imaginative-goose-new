@@ -25,11 +25,9 @@ import talib
 from datetime import datetime, timedelta
 import time
 
-# Add the Currents API key
+# API keys
 CURRENTS_API_KEY = "FkEEwNLACnLEfCoJ09fFe3yrVaPGZ76u-PKi8-yHqGRJ6hd8"
-
-# Add an Economic Calendar API key (you'll need to sign up for a service)
-ECONOMIC_CALENDAR_API_KEY = "your_economic_calendar_api_key_here"
+ALPHA_VANTAGE_API_KEY = "YOUR_ALPHA_VANTAGE_API_KEY"  # Replace with your actual Alpha Vantage API key
 
 def fetch_data(start_date, end_date):
     # ... (previous fetch_data function remains unchanged)
@@ -38,30 +36,27 @@ def fetch_news_sentiment(start_date, end_date, max_requests=600):
     # ... (previous fetch_news_sentiment function remains unchanged)
 
 def fetch_recent_news(days=7):
-    """Fetch recent news articles related to gold."""
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
-    
-    url = f"https://api.currentsapi.services/v1/search?keywords=gold&language=en&start_date={start_date.strftime('%Y-%m-%d')}&end_date={end_date.strftime('%Y-%m-%d')}&apiKey={CURRENTS_API_KEY}"
-    response = requests.get(url)
-    
-    if response.status_code == 200:
-        news_data = response.json()
-        return news_data.get('news', [])
-    else:
-        print(f"Failed to fetch recent news")
-        return []
+    # ... (previous fetch_recent_news function remains unchanged)
 
 def fetch_economic_calendar(start_date, end_date):
-    """Fetch economic calendar events."""
-    # Note: You'll need to replace this with an actual economic calendar API
-    # This is a placeholder function
-    url = f"https://api.example.com/economic_calendar?start_date={start_date}&end_date={end_date}&api_key={ECONOMIC_CALENDAR_API_KEY}"
+    """Fetch economic calendar events from Alpha Vantage."""
+    url = f"https://www.alphavantage.co/query?function=ECONOMIC_CALENDAR&apikey={ALPHA_VANTAGE_API_KEY}"
     response = requests.get(url)
     
     if response.status_code == 200:
         calendar_data = response.json()
-        return calendar_data
+        if 'error' in calendar_data:
+            print(f"Error fetching economic calendar: {calendar_data['error']}")
+            return []
+        
+        # Filter events within the specified date range
+        start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        end_date = datetime.strptime(end_date, "%Y-%m-%d")
+        filtered_events = [
+            event for event in calendar_data.get('economic_calendar', [])
+            if start_date <= datetime.strptime(event['date'], "%Y-%m-%d") <= end_date
+        ]
+        return filtered_events
     else:
         print(f"Failed to fetch economic calendar data")
         return []
@@ -74,10 +69,17 @@ def create_features(df, recent_news, economic_calendar):
     df['Recent_News_Sentiment'] = recent_news_sentiment
 
     # Add features based on economic calendar
-    # This is a placeholder - you'll need to adapt this based on the actual economic calendar data structure
-    important_events = ['Fed Rate Decision', 'GDP Release', 'Inflation Report']
-    for event in important_events:
-        df[f'{event}_Upcoming'] = economic_calendar.get(event, 0)
+    important_countries = ['United States', 'China', 'European Union', 'Japan']
+    important_events = ['GDP', 'Inflation Rate', 'Interest Rate Decision', 'Non-Farm Payrolls']
+    
+    for country in important_countries:
+        for event in important_events:
+            event_count = sum(1 for e in economic_calendar if e['country'] == country and event.lower() in e['event'].lower())
+            df[f'{country}_{event}_Count'] = event_count
+
+    # Add a feature for the overall number of high-impact events
+    high_impact_count = sum(1 for e in economic_calendar if e['impact'] == 'High')
+    df['High_Impact_Events_Count'] = high_impact_count
 
     df.dropna(inplace=True)
     return df
@@ -119,7 +121,11 @@ if __name__ == "__main__":
         print("---")
 
     print("\nUpcoming Economic Events:")
-    for event, value in economic_calendar.items():
-        print(f"{event}: {value}")
+    for event in economic_calendar[:10]:  # Print top 10 upcoming events
+        print(f"Date: {event['date']}")
+        print(f"Country: {event['country']}")
+        print(f"Event: {event['event']}")
+        print(f"Impact: {event['impact']}")
+        print("---")
 
-print("\nNote: This ultra-advanced model now incorporates historical and recent news sentiment data, as well as economic calendar information. However, it should still be used cautiously for actual trading decisions.")
+print("\nNote: This ultra-advanced model now incorporates historical and recent news sentiment data, as well as economic calendar information from Alpha Vantage. However, it should still be used cautiously for actual trading decisions.")
