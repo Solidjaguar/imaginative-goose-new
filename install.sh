@@ -34,3 +34,4 @@ mkdir -p data models logs
 
 echo "Installation completed. Please install CUDA and cuDNN manually, then install TensorFlow with GPU support."
 echo "After that, you can start the application by running: python src/main.py"
+echo "To start the API server, run: python src/api/main.py"

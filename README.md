@@ -10,6 +10,9 @@ This project is an advanced AI-driven system for predicting forex (EUR/USD) and 
 - Backtesting framework for strategy evaluation
 - Paper trading simulation
 - Web interface for easy interaction with the system
+- Robust logging system for better debugging and monitoring
+- Model versioning for tracking different iterations of models
+- Comprehensive unit testing
 
 ## Installation
 
@@ -46,6 +49,22 @@ This project is an advanced AI-driven system for predicting forex (EUR/USD) and 
 
 - API keys and other configurations can be set in `config/config.yaml`
 - Adjust model parameters in `src/models/model_trainer.py`
+
+## Logging
+
+The system uses a robust logging mechanism. Logs are stored in the `logs/` directory and are rotated when they reach 500 MB in size. You can adjust the logging configuration in `src/utils/logger.py`.
+
+## Model Versioning
+
+We use a custom model versioning system to keep track of different iterations of our models. Each model is saved with metadata including version number, timestamp, and performance metrics. You can find the implementation in `src/utils/model_versioner.py`.
+
+## Testing
+
+To run the unit tests:
+
+```
+python -m unittest discover tests
+```
 
 ## Contributing
 

@@ -14,3 +14,6 @@ pyts
 ta
 statsmodels
 yfinance
+fastapi
+uvicorn
+loguru
