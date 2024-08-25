@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Gold Price Predictor</title>
+    <title>AI Gold Price Predictor</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -20,34 +20,27 @@
             border-radius: 5px;
             margin-bottom: 20px;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        .prediction {
+            font-size: 1.2em;
+            font-weight: bold;
         }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
+        .positive {
+            color: green;
         }
-        th {
-            background-color: #f2f2f2;
+        .negative {
+            color: red;
         }
     </style>
 </head>
 <body>
-    <h1>Advanced Gold Price Predictor</h1>
+    <h1>AI Gold Price Predictor</h1>
     <div id="prediction-container">
         <h2>Latest Price: <span id="latest-price"></span></h2>
+        <h2>AI Prediction: <span id="ai-prediction" class="prediction"></span></h2>
+        <h2>Change Percentage: <span id="change-percentage"></span></h2>
         <h2>Win Percentage: <span id="win-percentage"></span></h2>
         <h2>Take Profit: <span id="take-profit"></span></h2>
         <h2>Stop Loss: <span id="stop-loss"></span></h2>
-        <h3>Predictions:</h3>
-        <table id="predictions-table">
-            <tr>
-                <th>Method</th>
-                <th>Prediction</th>
-            </tr>
-        </table>
     </div>
 
     <script>
@@ -61,23 +54,25 @@
                     return;
                 }
 
-                document.getElementById('latest-price').textContent = `$${data.latest_price} (${data.latest_date})`;
+                const latestPrice = data.latest_price;
+                const prediction = data.prediction_data.prediction;
+                const changePercentage = data.prediction_data.change_percentage;
+
+                document.getElementById('latest-price').textContent = `$${latestPrice} (${data.latest_date})`;
+                document.getElementById('ai-prediction').textContent = `$${prediction}`;
+                document.getElementById('change-percentage').textContent = `${changePercentage}%`;
                 document.getElementById('win-percentage').textContent = `${data.prediction_data.win_percentage}%`;
                 document.getElementById('take-profit').textContent = `$${data.prediction_data.take_profit}`;
                 document.getElementById('stop-loss').textContent = `$${data.prediction_data.stop_loss}`;
 
-                const predictionsTable = document.getElementById('predictions-table');
-                predictionsTable.innerHTML = '<tr><th>Method</th><th>Prediction</th></tr>';
-                
-                for (const [method, prediction] of Object.entries(data.prediction_data.predictions)) {
-                    const row = predictionsTable.insertRow();
-                    row.insertCell(0).textContent = method;
-                    row.insertCell(1).textContent = prediction ? `$${prediction}` : 'N/A';
+                const predictionElement = document.getElementById('ai-prediction');
+                if (changePercentage > 0) {
+                    predictionElement.classList.add('positive');
+                    predictionElement.classList.remove('negative');
+                } else {
+                    predictionElement.classList.add('negative');
+                    predictionElement.classList.remove('positive');
                 }
-
-                const avgRow = predictionsTable.insertRow();
-                avgRow.insertCell(0).textContent = 'Average';
-                avgRow.insertCell(1).textContent = `$${data.prediction_data.avg_prediction}`;
 
             } catch (error) {
                 console.error('Error fetching prediction:', error);

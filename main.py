@@ -1,6 +1,9 @@
 import urllib.request
 import json
 from datetime import datetime, timedelta
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
 
 API_KEY = "9V0G4JNKUKQ56QSB"
 BASE_URL = "https://www.alphavantage.co/query"
@@ -18,57 +21,36 @@ def fetch_gold_data():
         print(f"Error fetching data: {str(e)}")
         return []
 
-def calculate_sma(data, window):
-    if len(data) < window:
-        return None
-    return sum(float(d['price']) for d in data[:window]) / window
+def prepare_data(data):
+    X = []
+    y = []
+    for i in range(len(data) - 5):
+        X.append([float(data[j]['price']) for j in range(i, i+5)])
+        y.append(float(data[i+5]['price']))
+    return np.array(X), np.array(y)
 
-def calculate_ema(data, window):
-    if len(data) < window:
-        return None
-    prices = [float(d['price']) for d in data[:window]]
-    ema = sum(prices) / window
-    multiplier = 2 / (window + 1)
-    for price in prices[window:]:
-        ema = (price - ema) * multiplier + ema
-    return ema
+def train_model(X, y):
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+    return model
 
-def predict_price(data):
-    if len(data) < 10:
-        return None
+def predict_price(model, data):
+    last_5_prices = np.array([[float(data[i]['price']) for i in range(5)]])
+    prediction = model.predict(last_5_prices)[0]
     
     last_price = float(data[0]['price'])
-    sma_5 = calculate_sma(data, 5)
-    sma_10 = calculate_sma(data, 10)
-    ema_5 = calculate_ema(data, 5)
-    ema_10 = calculate_ema(data, 10)
+    change_percentage = ((prediction - last_price) / last_price) * 100
     
-    predictions = {
-        'SMA_5': round(sma_5, 2) if sma_5 else None,
-        'SMA_10': round(sma_10, 2) if sma_10 else None,
-        'EMA_5': round(ema_5, 2) if ema_5 else None,
-        'EMA_10': round(ema_10, 2) if ema_10 else None,
-    }
+    win_percentage = 60 if change_percentage > 0 else 40
     
-    # Calculate average prediction
-    valid_predictions = [p for p in predictions.values() if p is not None]
-    avg_prediction = sum(valid_predictions) / len(valid_predictions) if valid_predictions else None
-    
-    # Calculate win percentage
-    up_indicators = sum(1 for p in valid_predictions if p > last_price)
-    win_percentage = (up_indicators / len(valid_predictions)) * 100 if valid_predictions else 50
-    
-    # Calculate take profit and stop loss
-    if avg_prediction:
-        take_profit = round(avg_prediction * 1.01, 2)  # 1% above prediction
-        stop_loss = round(avg_prediction * 0.99, 2)    # 1% below prediction
-    else:
-        take_profit = stop_loss = None
+    take_profit = round(prediction * 1.01, 2)
+    stop_loss = round(prediction * 0.99, 2)
     
     return {
-        'predictions': predictions,
-        'avg_prediction': round(avg_prediction, 2) if avg_prediction else None,
-        'win_percentage': round(win_percentage, 2),
+        'prediction': round(prediction, 2),
+        'change_percentage': round(change_percentage, 2),
+        'win_percentage': win_percentage,
         'take_profit': take_profit,
         'stop_loss': stop_loss
     }
@@ -79,7 +61,9 @@ def main():
     if not gold_data:
         return json.dumps({"error": "Failed to fetch gold data"})
     
-    prediction_data = predict_price(gold_data)
+    X, y = prepare_data(gold_data)
+    model = train_model(X, y)
+    prediction_data = predict_price(model, gold_data)
     
     result = {
         'latest_price': float(gold_data[0]['price']),
