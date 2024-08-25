@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import yfinance as yf
@@ -11,6 +10,15 @@ import io
 import base64
 import logging
 from trading_strategy import calculate_indicators
+from ensemble_model import EnsembleModel, train_ensemble_model
+from ta.trend import MACD, SMAIndicator
+from ta.momentum import RSIIndicator
+from ta.volatility import BollingerBands
+from nltk.sentiment import SentimentIntensityAnalyzer
+import nltk
+import requests
+
+nltk.download('vader_lexicon')
 
 logging.basicConfig(filename='gold_forex_predictor.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,55 +46,88 @@ def fetch_all_data(start_date=None, end_date=None):
         'JPY/USD': 1 / fx_data['JPYUSD=X']['Close']
     }
 
-def prepare_data(data):
+def fetch_economic_indicators(start_date, end_date):
+    # This is a placeholder function. In a real-world scenario, you would use an API
+    # to fetch economic indicators like GDP, inflation rates, interest rates, etc.
+    # For this example, we'll generate random data
+    date_range = pd.date_range(start=start_date, end=end_date)
+    indicators = pd.DataFrame({
+        'GDP_growth': np.random.normal(2, 0.5, len(date_range)),
+        'Inflation_rate': np.random.normal(2, 0.3, len(date_range)),
+        'Interest_rate': np.random.normal(1, 0.2, len(date_range)),
+    }, index=date_range)
+    return indicators
+
+def fetch_news_sentiment(start_date, end_date):
+    # This is a placeholder function. In a real-world scenario, you would use a news API
+    # to fetch relevant news articles and perform sentiment analysis
+    # For this example, we'll generate random sentiment scores
+    date_range = pd.date_range(start=start_date, end=end_date)
+    sentiment = pd.DataFrame({
+        'News_sentiment': np.random.uniform(-1, 1, len(date_range)),
+    }, index=date_range)
+    return sentiment
+
+def add_advanced_features(df):
+    # Technical indicators
+    for column in ['Gold', 'EUR/USD', 'GBP/USD', 'JPY/USD']:
+        # MACD
+        macd = MACD(close=df[column])
+        df[f'{column}_MACD'] = macd.macd()
+        df[f'{column}_MACD_signal'] = macd.macd_signal()
+        df[f'{column}_MACD_diff'] = macd.macd_diff()
+
+        # SMA
+        sma = SMAIndicator(close=df[column], window=14)
+        df[f'{column}_SMA'] = sma.sma_indicator()
+
+        # RSI
+        rsi = RSIIndicator(close=df[column])
+        df[f'{column}_RSI'] = rsi.rsi()
+
+        # Bollinger Bands
+        bb = BollingerBands(close=df[column])
+        df[f'{column}_BB_high'] = bb.bollinger_hband()
+        df[f'{column}_BB_low'] = bb.bollinger_lband()
+
+    # Lagged features
+    for column in df.columns:
+        df[f'{column}_lag1'] = df[column].shift(1)
+        df[f'{column}_lag2'] = df[column].shift(2)
+
+    # Return features
+    for column in ['Gold', 'EUR/USD', 'GBP/USD', 'JPY/USD']:
+        df[f'{column}_return'] = df[column].pct_change()
+
+    return df
+
+def prepare_data(data, economic_indicators, news_sentiment):
     df = pd.DataFrame(data)
+    df = add_advanced_features(df)
+    
+    # Add economic indicators and news sentiment
+    df = df.join(economic_indicators)
+    df = df.join(news_sentiment)
+
     df.dropna(inplace=True)
 
-    for column in df.columns:
-        df[f'{column}_returns'] = df[column].pct_change()
+    X = df.drop(['EUR/USD', 'GBP/USD', 'JPY/USD'], axis=1)
+    y = df[['EUR/USD', 'GBP/USD', 'JPY/USD']].pct_change().shift(-1).dropna()
 
-    indicators = calculate_indicators(df)
-    df = pd.concat([df, indicators], axis=1)
-
-    X = df.drop(['Gold', 'EUR/USD', 'GBP/USD', 'JPY/USD'], axis=1).dropna()
-    y = df[['EUR/USD_returns', 'GBP/USD_returns', 'JPY/USD_returns']].shift(-1).dropna()
-
-    X = X[:-1]
-    y = y[:-1]
-
+    X = X[:-1]  # Remove the last row to align with y
+    
     return X, y
 
 def train_model():
     data = fetch_all_data()
-    X, y = prepare_data(data)
+    economic_indicators = fetch_economic_indicators(data.index[0], data.index[-1])
+    news_sentiment = fetch_news_sentiment(data.index[0], data.index[-1])
+    X, y = prepare_data(data, economic_indicators, news_sentiment)
 
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X, y)
-
-    # Perform cross-validation
-    cv_scores = {
-        'mse': cross_val_score(model, X, y, cv=5, scoring='neg_mean_squared_error'),
-        'mae': cross_val_score(model, X, y, cv=5, scoring='neg_mean_absolute_error'),
-        'r2': cross_val_score(model, X, y, cv=5, scoring='r2')
-    }
-
-    # Convert MSE and MAE to positive values
-    cv_scores['mse'] = -cv_scores['mse']
-    cv_scores['mae'] = -cv_scores['mae']
-
-    # Calculate mean and std for each metric
-    for metric in cv_scores:
-        cv_scores[metric] = {
-            'mean': cv_scores[metric].mean(),
-            'std': cv_scores[metric].std()
-        }
-
-    # Save cross-validation scores
-    with open('cv_scores.json', 'w') as f:
-        json.dump(cv_scores, f)
+    model = train_ensemble_model(X, y)
 
     # Generate feature importance plot
-    feature_importance = model.feature_importances_
+    feature_importance = model.rf_model.feature_importances_
     features = X.columns
     plt.figure(figsize=(10, 6))
     plt.bar(features, feature_importance)
@@ -108,7 +149,9 @@ def train_model():
 
 def make_predictions(model):
     data = fetch_all_data(start_date=datetime.now() - timedelta(days=30))
-    X, _ = prepare_data(data)
+    economic_indicators = fetch_economic_indicators(data.index[0], data.index[-1])
+    news_sentiment = fetch_news_sentiment(data.index[0], data.index[-1])
+    X, _ = prepare_data(data, economic_indicators, news_sentiment)
     X_latest = X.iloc[-1].values.reshape(1, -1)
     prediction = model.predict(X_latest)[0]
 
@@ -142,7 +185,9 @@ def update_actual_values():
 
     # Fetch the latest data
     latest_data = fetch_all_data(start_date=datetime.now() - timedelta(days=30))
-    _, y = prepare_data(latest_data)
+    economic_indicators = fetch_economic_indicators(latest_data.index[0], latest_data.index[-1])
+    news_sentiment = fetch_news_sentiment(latest_data.index[0], latest_data.index[-1])
+    _, y = prepare_data(latest_data, economic_indicators, news_sentiment)
 
     # Update actual values for previous predictions
     for i, pred in enumerate(predictions):
@@ -156,39 +201,8 @@ def update_actual_values():
     with open('predictions.json', 'w') as f:
         json.dump(predictions, f)
 
-def incorporate_paper_trading_results(model):
-    try:
-        with open('paper_trading_state.json', 'r') as f:
-            paper_trading_state = json.load(f)
-        
-        portfolio_values = paper_trading_state['portfolio_values']
-        
-        # Calculate daily returns from portfolio values
-        portfolio_returns = [
-            (portfolio_values[i]['value'] - portfolio_values[i-1]['value']) / portfolio_values[i-1]['value']
-            for i in range(1, len(portfolio_values))
-        ]
-        
-        # Fetch the corresponding feature data
-        data = fetch_all_data(start_date=datetime.fromisoformat(portfolio_values[0]['timestamp']))
-        X, _ = prepare_data(data)
-        
-        # Align the features with the portfolio returns
-        aligned_X = X.iloc[-len(portfolio_returns):]
-        aligned_y = pd.DataFrame(portfolio_returns, columns=['portfolio_returns'], index=aligned_X.index)
-        
-        # Retrain the model with the new data
-        model.fit(aligned_X, aligned_y)
-        
-        logging.info("Incorporated paper trading results into the model")
-    except FileNotFoundError:
-        logging.warning("No paper trading results found. Skipping incorporation.")
-    
-    return model
-
 def run_predictor():
     model = train_model()
-    model = incorporate_paper_trading_results(model)
     make_predictions(model)
     update_actual_values()
 
