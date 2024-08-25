@@ -1,50 +1,29 @@
-paths:
-  logs: 'logs/gold_predictor.log'
-  predictions: 'output/predictions.csv'
-  plots: 'output/plots/'
+# Project Configuration
 
-symbols:
-  gold: 'GC=F'
-  related_assets:
-    Silver: 'SI=F'
-    Oil: 'CL=F'
-    SP500: '^GSPC'
+# Paths
+data_dir: ./data
+models_dir: ./models
 
-lookback_days: 30
-train_test_split: 0.8
+# API Keys (replace with your actual keys)
+alpha_vantage_api_key: your_alpha_vantage_api_key
+fred_api_key: your_fred_api_key
 
-feature_selection:
-  n_features: 30
+# Model file paths
+random_forest_model_path: models/random_forest_model.joblib
+lasso_model_path: models/lasso_model.joblib
+svr_model_path: models/svr_model.joblib
+xgb_model_path: models/xgb_model.joblib
+lgbm_model_path: models/lgbm_model.joblib
+lstm_model_path: models/lstm_model.h5
 
-model_names:
-  - 'rf'
-  - 'xgb'
-  - 'lgbm'
-  - 'elasticnet'
+# Other configuration settings
+look_back_period: 30
+prediction_days: 7
 
-lstm:
-  units: 64
-  dropout: 0.2
-  dense_units: 32
-  learning_rate: 0.001
-  epochs: 100
-  batch_size: 32
+# Logging
+log_level: INFO
+log_file: logs/app.log
 
-prediction_interval_confidence: 0.95
-
-anomaly_detection:
-  contamination: 0.1
-
-retraining:
-  schedule: '00:00'  # Daily at midnight
-
-api_keys:
-  fred: '0a90d52441e615bc5957c9970b3abd29'
-  news: '5bb6e2c316ce43b38e0b64af0d7c1c38'
-
-cache:
-  directory: 'cache'
-  expiry: 86400  # 24 hours in seconds
-
-database:
-  name: 'performance_metrics.db'
+# Server settings
+host: 0.0.0.0
+port: 8080
