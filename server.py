@@ -9,10 +9,14 @@ class RequestHandler(SimpleHTTPRequestHandler):
             self.send_header('Content-type', 'text/html')
             self.end_headers()
             
-            prediction_data = json.loads(main())
-            latest_price = prediction_data['latest_price']
-            latest_date = prediction_data['latest_date']
-            predictions = prediction_data['prediction_data']
+            data = json.loads(main())
+            latest_price = data['latest_price']
+            latest_date = data['latest_date']
+            predictions = data['prediction_data']
+            portfolio_value = data['portfolio_value']
+            recent_trades = data['recent_trades']
+            balance = data['balance']
+            gold_holdings = data['gold_holdings']
             
             html_content = f"""
             <!DOCTYPE html>
@@ -20,19 +24,33 @@ class RequestHandler(SimpleHTTPRequestHandler):
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Gold Price Predictor</title>
+                <title>Gold Price Predictor and Paper Trader</title>
                 <style>
                     body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }}
-                    h1 {{ color: #333; }}
-                    .price {{ font-size: 24px; font-weight: bold; color: #4CAF50; }}
+                    h1, h2 {{ color: #333; }}
+                    .price, .value {{ font-size: 24px; font-weight: bold; color: #4CAF50; }}
                     table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
                     th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
                     th {{ background-color: #4CAF50; color: white; }}
                 </style>
             </head>
             <body>
-                <h1>Ultra Advanced Gold Price Predictor</h1>
+                <h1>Ultra Advanced Gold Price Predictor and Paper Trader</h1>
                 <p>Latest gold price: <span class="price">${latest_price:.2f}</span> (as of {latest_date})</p>
+                <h2>Paper Trading Portfolio:</h2>
+                <p>Portfolio Value: <span class="value">${portfolio_value:.2f}</span></p>
+                <p>Cash Balance: <span class="value">${balance:.2f}</span></p>
+                <p>Gold Holdings: <span class="value">{gold_holdings:.2f} oz</span></p>
+                <h2>Recent Trades:</h2>
+                <table>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Price</th>
+                        <th>Amount</th>
+                    </tr>
+                    {''.join(f"<tr><td>{trade['date']}</td><td>{trade['type']}</td><td>${trade['price']:.2f}</td><td>{trade['amount']:.2f} oz</td></tr>" for trade in recent_trades)}
+                </table>
                 <h2>Price Predictions with High Confidence:</h2>
                 <table>
                     <tr>
