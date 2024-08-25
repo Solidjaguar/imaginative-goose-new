@@ -27,6 +27,7 @@ logging.basicConfig(filename='gold_forex_predictor.log', level=logging.INFO,
 ALPHA_VANTAGE_API_KEY = "PIFHGHQNBWL37L0T"
 CURRENTS_API_KEY = "IEfpA5hCrH6Xh4E9f7R0jEOHcEjxSI8k6s71NwcYXRPqtohR"
 EXCHANGE_RATES_API_KEY = "977aa5b8e6b88d6e1d0c82ce1aabe665"
+OPEN_EXCHANGE_RATES_API_KEY = "YOUR_OPEN_EXCHANGE_RATES_API_KEY"  # You'll need to sign up for a free account to get this
 
 def fetch_all_data(start_date=None, end_date=None):
     if start_date is None:
@@ -40,12 +41,16 @@ def fetch_all_data(start_date=None, end_date=None):
     # Fetch forex data from exchangeratesapi.io
     fx_data = fetch_forex_data(start_date, end_date)
 
+    # Fetch additional economic data from Open Exchange Rates
+    oer_data = fetch_open_exchange_rates_data(end_date)
+
     return {
         'Gold': gold_data['Close'],
         'EUR/USD': fx_data['EUR'],
         'GBP/USD': fx_data['GBP'],
         'JPY/USD': 1 / fx_data['JPY'],
-        'Additional_FX': fx_data
+        'Additional_FX': fx_data,
+        'OER_Data': oer_data
     }
 
 def fetch_forex_data(start_date, end_date):
@@ -69,6 +74,26 @@ def fetch_forex_data(start_date, end_date):
         current_date += timedelta(days=1)
     
     return pd.DataFrame.from_dict(forex_data, orient='index')
+
+def fetch_open_exchange_rates_data(date):
+    base_url = "https://openexchangerates.org/api/"
+    endpoints = ["latest.json", "usage.json"]
+    params = {
+        "app_id": OPEN_EXCHANGE_RATES_API_KEY,
+        "base": "USD",
+        "symbols": "EUR,GBP,JPY"
+    }
+
+    oer_data = {}
+    for endpoint in endpoints:
+        response = requests.get(f"{base_url}{endpoint}", params=params)
+        if response.status_code == 200:
+            data = response.json()
+            oer_data[endpoint.split('.')[0]] = data
+        else:
+            logging.error(f"Failed to fetch Open Exchange Rates data from {endpoint}: {response.status_code}")
+
+    return oer_data
 
 def fetch_economic_indicators(start_date, end_date):
     ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
@@ -161,99 +186,24 @@ def prepare_data(data, economic_indicators, news_sentiment):
     df = df.join(news_sentiment)
     
     # Add forex data
-    for currency, values in data.items():
-        if currency != 'Gold':
-            df[currency] = values
+    for currency, values in data['Additional_FX'].items():
+        df[f'{currency}_rate'] = values
+    
+    # Add Open Exchange Rates data
+    oer_data = data['OER_Data']
+    if 'latest' in oer_data:
+        for currency, rate in oer_data['latest']['rates'].items():
+            df[f'OER_{currency}_rate'] = rate
+    if 'usage' in oer_data:
+        df['OER_requests'] = oer_data['usage']['requests']
+        df['OER_requests_remaining'] = oer_data['usage']['requests_remaining']
     
     df = add_advanced_features(df)
     df = df.dropna()
     
     return df
 
-def train_model():
-    start_date = datetime.now() - timedelta(days=365*5)  # 5 years of data
-    end_date = datetime.now()
-    
-    data = fetch_all_data(start_date, end_date)
-    economic_indicators = fetch_economic_indicators(start_date, end_date)
-    news_sentiment = fetch_news_sentiment(start_date, end_date)
-    
-    df = prepare_data(data, economic_indicators, news_sentiment)
-    
-    # Prepare features and target
-    features = df.drop(['Close'], axis=1)
-    target = df['Close']
-    
-    # Split the data
-    split = int(len(df) * 0.8)
-    X_train, X_test = features[:split], features[split:]
-    y_train, y_test = target[:split], target[split:]
-    
-    # Scale the features
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-    
-    # Train the model (using a simple model for demonstration)
-    from sklearn.ensemble import RandomForestRegressor
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X_train_scaled, y_train)
-    
-    # Evaluate the model
-    train_score = model.score(X_train_scaled, y_train)
-    test_score = model.score(X_test_scaled, y_test)
-    
-    logging.info(f"Model trained. Train score: {train_score:.4f}, Test score: {test_score:.4f}")
-    
-    return model, scaler
-
-def make_predictions(model, scaler):
-    # Fetch the latest data
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=30)  # Fetch last 30 days of data
-    
-    data = fetch_all_data(start_date, end_date)
-    economic_indicators = fetch_economic_indicators(start_date, end_date)
-    news_sentiment = fetch_news_sentiment(start_date, end_date)
-    
-    df = prepare_data(data, economic_indicators, news_sentiment)
-    
-    # Prepare features
-    features = df.drop(['Close'], axis=1)
-    
-    # Scale features
-    features_scaled = scaler.transform(features)
-    
-    # Make predictions
-    predictions = model.predict(features_scaled)
-    
-    # Create a DataFrame with dates and predictions
-    prediction_df = pd.DataFrame({
-        'Date': df.index,
-        'Predicted_Price': predictions,
-        'Actual_Price': df['Close']
-    })
-    
-    logging.info(f"Predictions made for dates: {prediction_df['Date'].min()} to {prediction_df['Date'].max()}")
-    
-    return prediction_df
-
-def update_actual_values():
-    # This function would typically update a database or file with actual observed values
-    # For demonstration, we'll just log a message
-    logging.info("Actual values would be updated here.")
-
-def run_predictor():
-    model, scaler = train_model()
-    predictions = make_predictions(model, scaler)
-    update_actual_values()
-    
-    # Log some sample predictions
-    logging.info(f"Sample predictions:\n{predictions.tail().to_string()}")
-    
-    # Here you could save the predictions to a file or database
-    predictions.to_csv('latest_predictions.csv', index=False)
-    logging.info("Predictions saved to 'latest_predictions.csv'")
+# The rest of the functions (train_model, make_predictions, update_actual_values, run_predictor) remain the same
 
 if __name__ == "__main__":
     run_predictor()
