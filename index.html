@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-time Gold Price Predictor</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Advanced Gold Price Predictor</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -12,7 +11,7 @@
             margin: 0 auto;
             padding: 20px;
         }
-        h1 {
+        h1, h2 {
             color: #4a4a4a;
         }
         #prediction-container {
@@ -21,19 +20,34 @@
             border-radius: 5px;
             margin-bottom: 20px;
         }
-        #chart-container {
-            height: 400px;
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
         }
     </style>
 </head>
 <body>
-    <h1>Real-time Gold Price Predictor</h1>
+    <h1>Advanced Gold Price Predictor</h1>
     <div id="prediction-container">
         <h2>Latest Price: <span id="latest-price"></span></h2>
-        <h2>Prediction: <span id="prediction"></span></h2>
-    </div>
-    <div id="chart-container">
-        <canvas id="priceChart"></canvas>
+        <h2>Win Percentage: <span id="win-percentage"></span></h2>
+        <h2>Take Profit: <span id="take-profit"></span></h2>
+        <h2>Stop Loss: <span id="stop-loss"></span></h2>
+        <h3>Predictions:</h3>
+        <table id="predictions-table">
+            <tr>
+                <th>Method</th>
+                <th>Prediction</th>
+            </tr>
+        </table>
     </div>
 
     <script>
@@ -48,30 +62,23 @@
                 }
 
                 document.getElementById('latest-price').textContent = `$${data.latest_price} (${data.latest_date})`;
-                document.getElementById('prediction').textContent = `$${data.prediction}`;
+                document.getElementById('win-percentage').textContent = `${data.prediction_data.win_percentage}%`;
+                document.getElementById('take-profit').textContent = `$${data.prediction_data.take_profit}`;
+                document.getElementById('stop-loss').textContent = `$${data.prediction_data.stop_loss}`;
 
-                const ctx = document.getElementById('priceChart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: data.historical_data.map(d => d.date).reverse(),
-                        datasets: [{
-                            label: 'Gold Price (USD)',
-                            data: data.historical_data.map(d => d.price).reverse(),
-                            borderColor: 'gold',
-                            tension: 0.1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: {
-                                beginAtZero: false
-                            }
-                        }
-                    }
-                });
+                const predictionsTable = document.getElementById('predictions-table');
+                predictionsTable.innerHTML = '<tr><th>Method</th><th>Prediction</th></tr>';
+                
+                for (const [method, prediction] of Object.entries(data.prediction_data.predictions)) {
+                    const row = predictionsTable.insertRow();
+                    row.insertCell(0).textContent = method;
+                    row.insertCell(1).textContent = prediction ? `$${prediction}` : 'N/A';
+                }
+
+                const avgRow = predictionsTable.insertRow();
+                avgRow.insertCell(0).textContent = 'Average';
+                avgRow.insertCell(1).textContent = `$${data.prediction_data.avg_prediction}`;
+
             } catch (error) {
                 console.error('Error fetching prediction:', error);
                 alert('Failed to fetch prediction. Please try again later.');
