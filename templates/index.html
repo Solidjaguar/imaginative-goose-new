@@ -112,12 +112,14 @@
             <th>Currency Pair</th>
             <th>Final Return</th>
             <th>Sharpe Ratio</th>
+            <th>Max Drawdown</th>
         </tr>
         {% for result in trading_strategy_results %}
         <tr>
             <td>{{ result.currency_pair }}</td>
             <td>{{ "%.4f"|format(result.final_return) }}</td>
             <td>{{ "%.4f"|format(result.sharpe_ratio) }}</td>
+            <td>{{ "%.4f"|format(result.max_drawdown) }}</td>
         </tr>
         {% endfor %}
     </table>
