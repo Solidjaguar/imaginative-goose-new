@@ -1,4 +1,5 @@
 import os
+import multiprocessing
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -21,3 +22,7 @@ LSTM_MODEL_PATH = os.path.join(MODELS_DIR, 'lstm_model.h5')
 # Other configuration settings
 LOOK_BACK_PERIOD = 30
 PREDICTION_DAYS = 7
+
+# Hardware settings
+USE_GPU = True
+NUM_CPU_CORES = multiprocessing.cpu_count()  # This will detect all available cores
