@@ -167,7 +167,188 @@ def fetch_geopolitical_events(start_date: str, end_date: str) -> pd.DataFrame:
         logger.error(f"Error fetching geopolitical events: {str(e)}")
         return pd.DataFrame(columns=['Date', 'Event', 'Impact'])
 
-# ... (rest of the functions remain the same)
+def create_features(gold_data: pd.DataFrame, economic_data: pd.DataFrame, sentiment_data: pd.DataFrame, 
+                    related_assets: Dict[str, pd.DataFrame], geopolitical_events: pd.DataFrame) -> pd.DataFrame:
+    """Create features for the gold price prediction model."""
+    df = gold_data.copy()
+    
+    # Technical indicators
+    df['SMA_50'] = talib.SMA(df['Close'], timeperiod=50)
+    df['SMA_200'] = talib.SMA(df['Close'], timeperiod=200)
+    df['RSI'] = talib.RSI(df['Close'], timeperiod=14)
+    df['MACD'], df['MACD_Signal'], _ = talib.MACD(df['Close'])
+    df['ATR'] = talib.ATR(df['High'], df['Low'], df['Close'], timeperiod=14)
+    df['Bollinger_Upper'], df['Bollinger_Middle'], df['Bollinger_Lower'] = talib.BBANDS(df['Close'])
+    
+    # Merge economic data
+    df = df.merge(economic_data, left_index=True, right_index=True, how='left')
+    
+    # Merge sentiment data
+    df = df.merge(sentiment_data, left_index=True, right_on='Date', how='left')
+    
+    # Add related assets data
+    for asset, asset_data in related_assets.items():
+        df[f'{asset}_Close'] = asset_data['Close']
+        df[f'{asset}_Volume'] = asset_data['Volume']
+    
+    # Add geopolitical events
+    df = df.merge(geopolitical_events, left_index=True, right_on='Date', how='left')
+    
+    # Fill missing values
+    df = df.ffill().bfill()
+    
+    return df
+
+def detect_anomalies(X: pd.DataFrame) -> np.ndarray:
+    """Detect anomalies in the feature set."""
+    clf = IForest(contamination=0.1, random_state=42)
+    return clf.fit_predict(X)
+
+def optimize_hyperparameters_parallel(X: pd.DataFrame, y: pd.Series, model_names: List[str]) -> Dict[str, Dict]:
+    """Optimize hyperparameters for multiple models in parallel."""
+    with Pool(processes=cpu_count()) as pool:
+        results = pool.starmap(optimize_model, [(X, y, model_name) for model_name in model_names])
+    return dict(zip(model_names, results))
+
+def optimize_model(X: pd.DataFrame, y: pd.Series, model_name: str) -> Dict:
+    """Optimize hyperparameters for a single model."""
+    if model_name == 'rf':
+        param_space = {
+            'n_estimators': (10, 200),
+            'max_depth': (2, 30),
+            'min_samples_split': (2, 20),
+            'min_samples_leaf': (1, 10)
+        }
+        estimator = RandomForestRegressor(random_state=42)
+    elif model_name == 'xgb':
+        param_space = {
+            'n_estimators': (10, 200),
+            'max_depth': (2, 30),
+            'learning_rate': (0.01, 0.3, 'log-uniform'),
+            'subsample': (0.5, 1.0, 'uniform'),
+            'colsample_bytree': (0.5, 1.0, 'uniform')
+        }
+        estimator = XGBRegressor(random_state=42)
+    elif model_name == 'lgbm':
+        param_space = {
+            'n_estimators': (10, 200),
+            'max_depth': (2, 30),
+            'learning_rate': (0.01, 0.3, 'log-uniform'),
+            'subsample': (0.5, 1.0, 'uniform'),
+            'colsample_bytree': (0.5, 1.0, 'uniform')
+        }
+        estimator = LGBMRegressor(random_state=42)
+    elif model_name == 'elasticnet':
+        param_space = {
+            'alpha': (0.0001, 1.0, 'log-uniform'),
+            'l1_ratio': (0.0, 1.0, 'uniform')
+        }
+        estimator = ElasticNet(random_state=42)
+    else:
+        raise ValueError(f"Unknown model name: {model_name}")
+
+    opt = BayesSearchCV(estimator, param_space, n_iter=50, cv=TimeSeriesSplit(n_splits=5), random_state=42)
+    opt.fit(X, y)
+    return opt.best_params_
+
+def train_model_parallel(args: Tuple[pd.DataFrame, pd.Series, str, Dict]) -> object:
+    """Train a single model with optimized hyperparameters."""
+    X, y, model_name, params = args
+    if model_name == 'rf':
+        model = RandomForestRegressor(random_state=42, **params)
+    elif model_name == 'xgb':
+        model = XGBRegressor(random_state=42, **params)
+    elif model_name == 'lgbm':
+        model = LGBMRegressor(random_state=42, **params)
+    elif model_name == 'elasticnet':
+        model = ElasticNet(random_state=42, **params)
+    else:
+        raise ValueError(f"Unknown model name: {model_name}")
+    model.fit(X, y)
+    return model
+
+def create_stacking_ensemble(models: List[Tuple[str, object]]) -> StackingRegressor:
+    """Create a stacking ensemble from the trained models."""
+    estimators = [(name, model) for name, model in models]
+    return StackingRegressor(estimators=estimators, final_estimator=ElasticNet(random_state=42))
+
+def train_lstm(X: np.ndarray, y: np.ndarray) -> Sequential:
+    """Train an LSTM model."""
+    model = Sequential([
+        Bidirectional(LSTM(64, return_sequences=True, kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4))),
+        Attention(),
+        Dropout(0.2),
+        Dense(32, activation='relu'),
+        Dropout(0.2),
+        Dense(1)
+    ])
+    model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
+    early_stopping = EarlyStopping(patience=10, restore_best_weights=True)
+    reduce_lr = ReduceLROnPlateau(factor=0.2, patience=5)
+    model.fit(X, y, epochs=100, batch_size=32, validation_split=0.2, callbacks=[early_stopping, reduce_lr], verbose=0)
+    return model
+
+def prepare_lstm_data(X: pd.DataFrame, y: pd.Series, lookback: int = 30) -> Tuple[np.ndarray, np.ndarray]:
+    """Prepare data for LSTM model."""
+    data = np.column_stack((X, y))
+    X, y = [], []
+    for i in range(len(data) - lookback):
+        X.append(data[i:(i + lookback), :-1])
+        y.append(data[i + lookback, -1])
+    return np.array(X), np.array(y)
+
+def calculate_prediction_intervals(predictions: np.ndarray, y_true: np.ndarray, confidence: float = 0.95) -> np.ndarray:
+    """Calculate prediction intervals."""
+    errors = y_true - predictions
+    std_error = np.std(errors)
+    z_score = norm.ppf((1 + confidence) / 2)
+    margin_of_error = z_score * std_error
+    lower_bound = predictions - margin_of_error
+    upper_bound = predictions + margin_of_error
+    return np.column_stack((lower_bound, predictions, upper_bound))
+
+def evaluate_model(y_true: np.ndarray, y_pred: np.ndarray) -> None:
+    """Evaluate model performance."""
+    mse = mean_squared_error(y_true, y_pred)
+    mae = mean_absolute_error(y_true, y_pred)
+    r2 = r2_score(y_true, y_pred)
+    logger.info(f"MSE: {mse:.4f}")
+    logger.info(f"MAE: {mae:.4f}")
+    logger.info(f"R2 Score: {r2:.4f}")
+
+def monitor_performance(y_true: np.ndarray, y_pred: np.ndarray, model_name: str) -> None:
+    """Monitor model performance over time."""
+    mse = mean_squared_error(y_true, y_pred)
+    mae = mean_absolute_error(y_true, y_pred)
+    r2 = r2_score(y_true, y_pred)
+    
+    conn = sqlite3.connect('performance_metrics.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS performance
+                 (timestamp TEXT, model TEXT, mse REAL, mae REAL, r2 REAL)''')
+    c.execute("INSERT INTO performance VALUES (?, ?, ?, ?, ?)",
+              (datetime.now().isoformat(), model_name, mse, mae, r2))
+    conn.commit()
+    conn.close()
+
+def save_checkpoint(data: Dict, filename: str) -> None:
+    """Save model checkpoint."""
+    joblib.dump(data, filename)
+
+def load_checkpoint(filename: str) -> Dict:
+    """Load model checkpoint."""
+    return joblib.load(filename)
+
+def schedule_retraining() -> None:
+    """Schedule model retraining."""
+    def retrain():
+        logger.info("Retraining models...")
+        # Add retraining logic here
+    
+    schedule.every().day.at("00:00").do(retrain)
+    while True:
+        schedule.run_pending()
+        time.sleep(3600)  # Sleep for an hour between checks
 
 def fetch_data_for_model(days: int = 30):
     """Fetch all necessary data for the model using a rolling window."""

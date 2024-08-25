@@ -17,9 +17,10 @@ seaborn
 shap
 pyod
 river
-dask
+dask[complete]
 distributed
 fredapi
 newsapi-python
 schedule
 ratelimit
+joblib
