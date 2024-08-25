@@ -33,14 +33,16 @@ class RequestHandler(SimpleHTTPRequestHandler):
             <body>
                 <h1>Ultra Advanced Gold Price Predictor</h1>
                 <p>Latest gold price: <span class="price">${latest_price:.2f}</span> (as of {latest_date})</p>
-                <h2>Price Predictions for the Next 7 Days:</h2>
+                <h2>Price Predictions with High Confidence:</h2>
                 <table>
                     <tr>
                         <th>Date</th>
                         <th>Predicted Price</th>
+                        <th>Confidence</th>
                     </tr>
-                    {''.join(f"<tr><td>{pred['Date']}</td><td>${pred['Predicted_Price']:.2f}</td></tr>" for pred in predictions)}
+                    {''.join(f"<tr><td>{pred['Date']}</td><td>${pred['Predicted_Price']:.2f}</td><td>{pred['Confidence']:.2%}</td></tr>" for pred in predictions)}
                 </table>
+                <p>Note: Only predictions with confidence level of 70% or higher are shown.</p>
             </body>
             </html>
             """
