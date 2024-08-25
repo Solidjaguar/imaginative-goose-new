@@ -14,7 +14,6 @@
         .metrics { display: flex; justify-content: space-around; margin-bottom: 20px; }
         .metric { text-align: center; }
         .metric-value { font-size: 24px; font-weight: bold; }
-        #paperTradingBtn { margin-bottom: 20px; padding: 10px 20px; font-size: 16px; }
     </style>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
@@ -79,63 +78,20 @@
     <img src="data:image/png;base64,{{ feature_importance }}" alt="Feature Importance Chart">
     {% endif %}
     
-    {% if backtest_results %}
-    <h2>Backtesting Results</h2>
-    <table>
+    <h2>Paper Trading Results</h2>
+    <div id="paperTradingChart"></div>
+    
+    <h2>Latest Trade History</h2>
+    <table id="tradeHistory">
         <tr>
+            <th>Timestamp</th>
             <th>Currency Pair</th>
-            <th>Mean Squared Error</th>
-            <th>Mean Absolute Error</th>
-            <th>R-squared</th>
+            <th>Action</th>
+            <th>Amount</th>
+            <th>Price</th>
+            <th>Cost</th>
         </tr>
-        {% for result in backtest_results %}
-        <tr>
-            <td>{{ result.currency_pair }}</td>
-            <td>{{ "%.6f"|format(result.mse) }}</td>
-            <td>{{ "%.6f"|format(result.mae) }}</td>
-            <td>{{ "%.6f"|format(result.r2) }}</td>
-        </tr>
-        {% endfor %}
     </table>
-    
-    {% if backtest_plots %}
-    <h2>Backtesting Plots</h2>
-    {% for currency_pair, plot in backtest_plots.items() %}
-    <h3>{{ currency_pair }}</h3>
-    <img src="data:image/png;base64,{{ plot }}" alt="Backtest Plot for {{ currency_pair }}">
-    {% endfor %}
-    {% endif %}
-    {% endif %}
-    
-    {% if trading_strategy_results %}
-    <h2>Trading Strategy Results</h2>
-    <table>
-        <tr>
-            <th>Currency Pair</th>
-            <th>Final Return</th>
-            <th>Sharpe Ratio</th>
-            <th>Max Drawdown</th>
-        </tr>
-        {% for result in trading_strategy_results %}
-        <tr>
-            <td>{{ result.currency_pair }}</td>
-            <td>{{ "%.4f"|format(result.final_return) }}</td>
-            <td>{{ "%.4f"|format(result.sharpe_ratio) }}</td>
-            <td>{{ "%.4f"|format(result.max_drawdown) }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    
-    <h2>Trading Strategy Plots</h2>
-    {% for result in trading_strategy_results %}
-    <h3>{{ result.currency_pair }}</h3>
-    <img src="data:image/png;base64,{{ result.plot }}" alt="Trading Strategy Plot for {{ result.currency_pair }}">
-    {% endfor %}
-    {% endif %}
-    
-    <h2>Paper Trading</h2>
-    <button id="paperTradingBtn">Run Paper Trading</button>
-    <div id="paperTradingResults"></div>
     
     <h2>Latest Predictions</h2>
     <table>
@@ -180,33 +136,57 @@
     </table>
 
     <script>
-        document.getElementById('paperTradingBtn').addEventListener('click', function() {
-            fetch('/run_paper_trading')
+        function updatePaperTradingResults() {
+            fetch('/paper_trading_update')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.status === 'success') {
-                        alert('Paper trading completed. Refreshing page to show results.');
-                        location.reload();
-                    } else {
-                        alert('Error running paper trading. Please check the logs.');
+                    if (data.error) {
+                        console.error(data.error);
+                        return;
                     }
+                    
+                    // Update portfolio value chart
+                    var trace = {
+                        x: data.portfolio_values.map(d => d.timestamp),
+                        y: data.portfolio_values.map(d => d.value),
+                        type: 'scatter'
+                    };
+                    var layout = {
+                        title: 'Paper Trading Portfolio Value',
+                        xaxis: { title: 'Date' },
+                        yaxis: { title: 'Portfolio Value' }
+                    };
+                    Plotly.newPlot('paperTradingChart', [trace], layout);
+                    
+                    // Update trade history table
+                    var tradeHistoryTable = document.getElementById('tradeHistory');
+                    tradeHistoryTable.innerHTML = `
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Currency Pair</th>
+                            <th>Action</th>
+                            <th>Amount</th>
+                            <th>Price</th>
+                            <th>Cost</th>
+                        </tr>
+                    `;
+                    data.trade_history.slice(-10).forEach(trade => {
+                        var row = tradeHistoryTable.insertRow(-1);
+                        row.insertCell(0).textContent = trade.timestamp;
+                        row.insertCell(1).textContent = trade.currency_pair;
+                        row.insertCell(2).textContent = trade.action;
+                        row.insertCell(3).textContent = trade.amount.toFixed(4);
+                        row.insertCell(4).textContent = trade.price.toFixed(4);
+                        row.insertCell(5).textContent = trade.cost.toFixed(4);
+                    });
                 });
-        });
-
-        {% if paper_trading_results %}
-        var portfolioValues = {{ paper_trading_results.portfolio_values | tojson }};
-        var trace = {
-            x: portfolioValues.map(d => d.timestamp),
-            y: portfolioValues.map(d => d.value),
-            type: 'scatter'
-        };
-        var layout = {
-            title: 'Paper Trading Portfolio Value',
-            xaxis: { title: 'Date' },
-            yaxis: { title: 'Portfolio Value' }
-        };
-        Plotly.newPlot('paperTradingResults', [trace], layout);
-        {% endif %}
+        }
+        
+        // Update paper trading results every 5 minutes
+        setInterval(updatePaperTradingResults, 300000);
+        
+        // Initial update
+        updatePaperTradingResults();
     </script>
 </body>
 </html>

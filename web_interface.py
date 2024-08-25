@@ -6,7 +6,6 @@ import io
 import base64
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
-from paper_trader import PaperTrader
 
 app = Flask(__name__)
 
@@ -69,31 +68,14 @@ def load_feature_importance():
     except FileNotFoundError:
         return None
 
-def load_backtest_results():
-    try:
-        with open('backtest_results.json', 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return None
-
-def load_backtest_plots():
-    try:
-        with open('backtest_plots.json', 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return None
-
-def load_trading_strategy_results():
-    try:
-        with open('trading_strategy_results.json', 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return None
-
 def load_paper_trading_results():
     try:
-        with open('paper_trading_results.json', 'r') as f:
-            return json.load(f)
+        with open('paper_trading_state.json', 'r') as f:
+            state = json.load(f)
+        return {
+            'portfolio_values': state['portfolio_values'],
+            'trade_history': state['trade_history']
+        }
     except FileNotFoundError:
         return None
 
@@ -104,28 +86,18 @@ def index():
     metrics = calculate_metrics(predictions)
     cv_scores = load_cv_scores()
     feature_importance = load_feature_importance()
-    backtest_results = load_backtest_results()
-    backtest_plots = load_backtest_plots()
-    trading_strategy_results = load_trading_strategy_results()
     paper_trading_results = load_paper_trading_results()
     return render_template('index.html', predictions=predictions, plot_url=plot_url, metrics=metrics, 
                            cv_scores=cv_scores, feature_importance=feature_importance, 
-                           backtest_results=backtest_results, backtest_plots=backtest_plots,
-                           trading_strategy_results=trading_strategy_results,
                            paper_trading_results=paper_trading_results)
 
-@app.route('/run_paper_trading')
-def run_paper_trading():
-    paper_trader = PaperTrader()
-    portfolio_values = paper_trader.run_paper_trading()
-    
-    with open('paper_trading_results.json', 'w') as f:
-        json.dump({
-            'portfolio_values': portfolio_values,
-            'trade_history': paper_trader.trade_history
-        }, f)
-    
-    return jsonify({'status': 'success', 'message': 'Paper trading completed'})
+@app.route('/paper_trading_update')
+def paper_trading_update():
+    paper_trading_results = load_paper_trading_results()
+    if paper_trading_results:
+        return jsonify(paper_trading_results)
+    else:
+        return jsonify({'error': 'No paper trading results available'})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
