@@ -1,87 +1,63 @@
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import timedelta
 from sklearn.preprocessing import StandardScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
 import joblib
 
-class StackingEnsembleModel:
-    def __init__(self, lstm_units=50, dropout_rate=0.2):
-        self.rf_model = None
-        self.lstm_model = None
-        self.lstm_units = lstm_units
-        self.dropout_rate = dropout_rate
+class AdaptivePredictor:
+    def __init__(self, market):
+        self.market = market
+        self.ensemble = joblib.load(f'models/ensemble_{market.replace("/", "_")}.joblib')
         self.scaler = StandardScaler()
-
-    def create_lstm_model(self, input_shape):
-        model = Sequential([
-            LSTM(self.lstm_units, return_sequences=True, input_shape=input_shape),
-            Dropout(self.dropout_rate),
-            LSTM(self.lstm_units),
-            Dropout(self.dropout_rate),
-            Dense(1)
-        ])
-        model.compile(optimizer='adam', loss='mse')
-        return model
-
-    def prepare_lstm_data(self, X, y, lookback=10):
-        X_lstm, y_lstm = [], []
-        for i in range(len(X) - lookback):
-            X_lstm.append(X[i:(i + lookback)])
-            y_lstm.append(y[i + lookback])
-        return np.array(X_lstm), np.array(y_lstm)
-
-    def fit(self, X, y, market):
-        # Load Random Forest model
-        self.rf_model = joblib.load(f'best_model_{market.replace("/", "_")}.joblib')
-
-        # LSTM
-        X_scaled = self.scaler.fit_transform(X)
-        X_lstm, y_lstm = self.prepare_lstm_data(X_scaled, y)
-
-        self.lstm_model = self.create_lstm_model((X_lstm.shape[1], X_lstm.shape[2]))
-        self.lstm_model.fit(X_lstm, y_lstm, epochs=50, batch_size=32, verbose=0)
+        self.learning_rate = 0.01
+        self.performance_history = []
 
     def predict(self, X, steps=7):
+        X_scaled = self.scaler.fit_transform(X)
         predictions = []
-        current_X = X[-10:].copy()  # Use the last 10 data points
+        current_X = X_scaled[-1:].copy()
 
         for _ in range(steps):
-            # Random Forest prediction
-            rf_pred = self.rf_model.predict(current_X[-1:])
-
-            # LSTM prediction
-            X_scaled = self.scaler.transform(current_X)
-            X_lstm = X_scaled.reshape((1, 10, X_scaled.shape[1]))
-            lstm_pred = self.lstm_model.predict(X_lstm).flatten()
-
-            # Combine predictions (simple average)
-            final_pred = (rf_pred + lstm_pred) / 2
-
-            predictions.append(final_pred[0])
+            pred = self.ensemble.predict(current_X)
+            predictions.append(pred[0])
 
             # Update current_X for the next prediction
-            new_row = current_X[-1:].copy()
-            new_row['price'] = final_pred[0]
-            current_X = pd.concat([current_X[1:], new_row])
+            current_X = np.roll(current_X, -1, axis=0)
+            current_X[0, -1] = pred[0]
 
         return np.array(predictions)
 
+    def update(self, actual, predicted):
+        error = np.mean((actual - predicted) ** 2)
+        self.performance_history.append(error)
+
+        # Adjust learning rate based on recent performance
+        if len(self.performance_history) > 10:
+            recent_performance = np.mean(self.performance_history[-10:])
+            if recent_performance > np.mean(self.performance_history):
+                self.learning_rate *= 0.9  # Decrease learning rate
+            else:
+                self.learning_rate *= 1.1  # Increase learning rate
+
+        # Update model weights
+        for model in self.ensemble.models:
+            if hasattr(model, 'learning_rate'):
+                model.learning_rate = self.learning_rate
+
 def predict_prices(data, steps=7):
     predictions = {}
+    predictors = {}
     for market, market_data in data.items():
         print(f"Making predictions for {market}...")
         X = market_data.drop('price', axis=1)
         y = market_data['price']
 
-        ensemble = StackingEnsembleModel()
-        ensemble.fit(X, y, market)
-
+        predictor = AdaptivePredictor(market)
         future_dates = [market_data.index[-1] + timedelta(days=i) for i in range(1, steps+1)]
-        predictions[market] = pd.Series(ensemble.predict(X, steps=steps), index=future_dates)
+        predictions[market] = pd.Series(predictor.predict(X, steps=steps), index=future_dates)
+        predictors[market] = predictor
 
-    return predictions
+    return predictions, predictors
 
 if __name__ == "__main__":
     from data_fetcher import fetch_all_data
@@ -89,7 +65,7 @@ if __name__ == "__main__":
     
     raw_data = fetch_all_data()
     prepared_data = prepare_data(raw_data)
-    predictions = predict_prices(prepared_data)
+    predictions, _ = predict_prices(prepared_data)
     
     for market, pred in predictions.items():
         print(f"\n{market} predictions:")

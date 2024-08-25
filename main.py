@@ -2,7 +2,7 @@ import json
 from src.data_fetcher import fetch_all_data
 from src.data_processor import prepare_data
 from src.model_trainer import train_models
-from src.predictor import predict_prices
+from src.predictor import predict_prices, AdaptivePredictor
 from src.visualizer import plot_predictions, plot_performance, calculate_performance_metrics
 from src.trading_strategies import moving_average_crossover, rsi_strategy, bollinger_bands_strategy
 from paper_trader import PaperTrader
@@ -17,7 +17,7 @@ def main():
         models = train_models(prepared_data)
 
         # Make predictions
-        predictions = predict_prices(prepared_data)
+        predictions, predictors = predict_prices(prepared_data)
 
         # Plot predictions
         plot_predictions(prepared_data, predictions)
@@ -53,6 +53,12 @@ def main():
 
             # Calculate portfolio value over time
             portfolios[market] = trader.get_portfolio_history(market_data['price'])
+
+            # Update predictor with actual values
+            predictor = predictors[market]
+            actual = market_data['price'].iloc[-7:]  # Last 7 days
+            predicted = predictions[market].iloc[:7]  # First 7 predictions
+            predictor.update(actual, predicted)
 
         # Plot trading performance
         plot_performance(prepared_data, signals, portfolios)
