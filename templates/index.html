@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gold Price Predictor</title>
+    <title>Forex and Gold Price Predictor</title>
     <style>
         body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }}
-        h1, h2 {{ color: #333; }}
+        h1, h2, h3 {{ color: #333; }}
         table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
         th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
         th {{ background-color: #f2f2f2; }}
@@ -14,48 +14,8 @@
     </style>
 </head>
 <body>
-    <h1>Gold Price Predictor</h1>
+    <h1>Forex and Gold Price Predictor</h1>
     
-    <h2>Latest Gold Price: ${latest_price:.2f}</h2>
-    
-    <h2>Predictions</h2>
-    <table>
-        <tr>
-            <th>Date</th>
-            <th>Predicted Price</th>
-        </tr>
-        {predictions}
-    </table>
-    
-    <h2>Portfolio Summary</h2>
-    <p>Total Portfolio Value: ${portfolio_value:.2f}</p>
-    <p>Cash Balance: ${balance:.2f}</p>
-    <p>Gold Holdings: {gold_holdings:.4f} oz</p>
-    
-    <h2>Recent Trades</h2>
-    <table>
-        <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Price</th>
-            <th>Amount</th>
-        </tr>
-        {recent_trades}
-    </table>
-    
-    <h2>Performance Metrics</h2>
-    <table>
-        <tr>
-            <th>Metric</th>
-            <th>Value</th>
-        </tr>
-        {performance_metrics}
-    </table>
-    
-    <h2>Gold Price Predictions Chart</h2>
-    <img src="/gold_predictions.png" alt="Gold Price Predictions">
-    
-    <h2>Trading Performance Chart</h2>
-    <img src="/trading_performance.png" alt="Trading Performance">
+    {markets}
 </body>
 </html>
