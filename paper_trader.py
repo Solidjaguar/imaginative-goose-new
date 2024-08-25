@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 import json
 import logging
 import time
-from gold_forex_predictor import fetch_all_data, prepare_data, add_technical_indicators
-from trading_strategy import calculate_indicators, combined_strategy, optimize_strategy, apply_risk_management, calculate_position_size
+from gold_forex_predictor import fetch_all_data, prepare_data, add_advanced_features
+from ensemble_model import StackingEnsembleModel, train_stacking_ensemble_model
+from risk_management import apply_risk_management, calculate_var, calculate_cvar, maximum_drawdown, sharpe_ratio
 from performance_metrics import generate_performance_report
 
 logging.basicConfig(filename='paper_trader.log', level=logging.INFO,
@@ -20,7 +21,7 @@ class PaperTrader:
         self.slippage = slippage
         self.trade_history = []
         self.portfolio_values = []
-        self.strategy = combined_strategy
+        self.model = None
         self.optimization_interval = 30  # Optimize strategy every 30 days
         self.performance_report_interval = 7  # Generate performance report every 7 days
 
@@ -64,9 +65,9 @@ class PaperTrader:
             portfolio_value += amount * current_prices[currency_pair]
         return portfolio_value
 
-    def optimize_strategy(self, historical_data):
-        self.strategy = optimize_strategy(historical_data, self.trade_history)
-        logging.info("Strategy optimized based on historical data and paper trading results")
+    def train_model(self, X, y):
+        self.model = train_stacking_ensemble_model(X, y)
+        logging.info("Stacking Ensemble Model trained")
 
     def generate_performance_report(self, historical_data):
         portfolio_values = pd.DataFrame(self.portfolio_values)
@@ -74,10 +75,16 @@ class PaperTrader:
         portfolio_values.set_index('timestamp', inplace=True)
         portfolio_returns = portfolio_values['value'].pct_change().dropna()
 
-        benchmark_returns = historical_data['EUR/USD_returns']  # Using EUR/USD as benchmark
+        benchmark_returns = historical_data['EUR/USD'].pct_change().dropna()
         benchmark_returns = benchmark_returns[benchmark_returns.index.isin(portfolio_returns.index)]
 
         report = generate_performance_report(portfolio_returns, benchmark_returns)
+        
+        # Add advanced risk metrics
+        report['Value at Risk (95%)'] = calculate_var(portfolio_returns)
+        report['Conditional Value at Risk (95%)'] = calculate_cvar(portfolio_returns)
+        report['Maximum Drawdown'] = maximum_drawdown(portfolio_returns)
+        report['Sharpe Ratio'] = sharpe_ratio(portfolio_returns)
         
         with open('performance_report.json', 'w') as f:
             json.dump(report.to_dict(), f)
@@ -91,20 +98,24 @@ class PaperTrader:
         data = fetch_all_data(start_date, end_date)
         X, y = prepare_data(data)
         
+        self.train_model(X, y)
+        
         last_optimization = datetime.now()
         last_performance_report = datetime.now()
         
         while True:
             current_time = datetime.now()
             
-            # Optimize strategy every 30 days
+            # Retrain model every 30 days
             if (current_time - last_optimization).days >= self.optimization_interval:
-                self.optimize_strategy(pd.concat([X, y], axis=1))
+                data = fetch_all_data(current_time - timedelta(days=365), current_time)
+                X, y = prepare_data(data)
+                self.train_model(X, y)
                 last_optimization = current_time
             
             # Generate performance report every 7 days
             if (current_time - last_performance_report).days >= self.performance_report_interval:
-                self.generate_performance_report(pd.concat([X, y], axis=1))
+                self.generate_performance_report(data)
                 last_performance_report = current_time
             
             current_prices = {
@@ -113,18 +124,41 @@ class PaperTrader:
                 'JPY/USD': data['JPY/USD'].iloc[-1]
             }
             
-            indicators = calculate_indicators(pd.Series(current_prices))
+            latest_features = X.iloc[-1].values.reshape(1, -1)
+            predictions = self.model.predict(latest_features)[0]
             
-            for currency_pair in ['EUR/USD', 'GBP/USD', 'JPY/USD']:
-                suggested_position = self.strategy(indicators.iloc[-1], self.positions[currency_pair], current_prices[currency_pair])
-                position = apply_risk_management(suggested_position, self.entry_prices[currency_pair], current_prices[currency_pair])
+            for i, currency_pair in enumerate(['EUR/USD', 'GBP/USD', 'JPY/USD']):
+                prediction = predictions[i]
+                current_price = current_prices[currency_pair]
+                entry_price = self.entry_prices[currency_pair]
                 
-                if position != self.positions[currency_pair]:
-                    trade_amount = calculate_position_size(self.balance)
-                    if position > self.positions[currency_pair]:
-                        self.execute_trade(currency_pair, 'buy', trade_amount, current_prices[currency_pair])
-                    else:
-                        self.execute_trade(currency_pair, 'sell', trade_amount, current_prices[currency_pair])
+                # Determine suggested position based on prediction
+                if prediction > 0.001:  # Bullish
+                    suggested_position = 1
+                elif prediction < -0.001:  # Bearish
+                    suggested_position = -1
+                else:  # Neutral
+                    suggested_position = 0
+                
+                # Calculate ATR for risk management
+                atr = data[currency_pair].diff().abs().rolling(window=14).mean().iloc[-1]
+                
+                # Apply risk management
+                position_size, stop_loss = apply_risk_management(
+                    suggested_position, entry_price, current_price, self.balance, atr
+                )
+                
+                # Execute trade
+                if position_size > 0 and self.positions[currency_pair] <= 0:
+                    self.execute_trade(currency_pair, 'buy', position_size, current_price)
+                elif position_size < 0 and self.positions[currency_pair] >= 0:
+                    self.execute_trade(currency_pair, 'sell', abs(position_size), current_price)
+                
+                # Check for stop loss
+                if (self.positions[currency_pair] > 0 and current_price <= stop_loss) or \
+                   (self.positions[currency_pair] < 0 and current_price >= stop_loss):
+                    self.execute_trade(currency_pair, 'sell' if self.positions[currency_pair] > 0 else 'buy',
+                                       abs(self.positions[currency_pair]), current_price)
             
             portfolio_value = self.get_portfolio_value(current_prices)
             self.portfolio_values.append({
