@@ -4,17 +4,52 @@ from main import main
 
 class RequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/prediction':
+        if self.path == '/':
             self.send_response(200)
-            self.send_header('Content-type', 'application/json')
+            self.send_header('Content-type', 'text/html')
             self.end_headers()
-            prediction = main()
-            self.wfile.write(prediction.encode())
+            
+            prediction_data = json.loads(main())
+            latest_price = prediction_data['latest_price']
+            latest_date = prediction_data['latest_date']
+            predictions = prediction_data['prediction_data']
+            
+            html_content = f"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Gold Price Predictor</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }}
+                    h1 {{ color: #333; }}
+                    .price {{ font-size: 24px; font-weight: bold; color: #4CAF50; }}
+                    table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
+                    th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+                    th {{ background-color: #4CAF50; color: white; }}
+                </style>
+            </head>
+            <body>
+                <h1>Ultra Advanced Gold Price Predictor</h1>
+                <p>Latest gold price: <span class="price">${latest_price:.2f}</span> (as of {latest_date})</p>
+                <h2>Price Predictions for the Next 7 Days:</h2>
+                <table>
+                    <tr>
+                        <th>Date</th>
+                        <th>Predicted Price</th>
+                    </tr>
+                    {''.join(f"<tr><td>{pred['Date']}</td><td>${pred['Predicted_Price']:.2f}</td></tr>" for pred in predictions)}
+                </table>
+            </body>
+            </html>
+            """
+            self.wfile.write(html_content.encode())
         else:
             super().do_GET()
 
 def run(server_class=HTTPServer, handler_class=RequestHandler, port=8080):
-    server_address = ('', port)
+    server_address = ('0.0.0.0', port)
     httpd = server_class(server_address, handler_class)
     print(f'Starting httpd on port {port}...')
     httpd.serve_forever()
