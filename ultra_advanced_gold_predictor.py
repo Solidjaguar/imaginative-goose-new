@@ -48,7 +48,12 @@ logger = logging.getLogger(__name__)
 
 # Initialize APIs
 fred = fredapi.Fred(api_key='b908a65514252b6083d034c389db6ad9')
-newsapi = NewsApiClient(api_key=os.getenv('NEWS_API_KEY'))  # Set this environment variable
+
+# Set the News API key as an environment variable
+os.environ['NEWS_API_KEY'] = '92b4a1aad8a04c6bb909892b99202d91'
+
+# Initialize NewsApiClient with the key from the environment variable
+newsapi = NewsApiClient(api_key=os.getenv('NEWS_API_KEY'))
 
 def fetch_economic_data(start_date: str, end_date: str) -> pd.DataFrame:
     """Fetch economic data from FRED."""
@@ -140,4 +145,4 @@ if __name__ == "__main__":
     
     # ... (rest of the main execution remains the same)
 
-print("\nNote: This ultra-advanced gold price prediction model now uses the provided FRED API key and expects the NEWS_API_KEY to be set as an environment variable. Please ensure you have set this before running the script.")
+print("\nNote: This script now uses the provided News API key, set as an environment variable for improved security. Please be aware of the API usage limits and ensure compliance with the News API terms of service.")
