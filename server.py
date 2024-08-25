@@ -1,6 +1,8 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import json
 from main import main
+import os
+import time
 
 class RequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -10,13 +12,22 @@ class RequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             
             data = json.loads(main())
-            latest_price = data['latest_price']
-            latest_date = data['latest_date']
-            predictions = data['prediction_data']
-            portfolio_value = data['portfolio_value']
-            recent_trades = data['recent_trades']
-            balance = data['balance']
-            gold_holdings = data['gold_holdings']
+            latest_price = data.get('latest_price', 'N/A')
+            latest_date = data.get('latest_date', 'N/A')
+            predictions = data.get('prediction_data', [])
+            portfolio_value = data.get('portfolio_value', 'N/A')
+            recent_trades = data.get('recent_trades', [])
+            balance = data.get('balance', 'N/A')
+            gold_holdings = data.get('gold_holdings', 'N/A')
+            
+            # Check if background process is running
+            try:
+                with open('latest_predictions.json', 'r') as f:
+                    last_update = os.path.getmtime('latest_predictions.json')
+                    last_update_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_update))
+                    bg_status = f"Running (Last update: {last_update_str})"
+            except FileNotFoundError:
+                bg_status = "Not running or hasn't made predictions yet"
             
             html_content = f"""
             <!DOCTYPE html>
@@ -42,11 +53,12 @@ class RequestHandler(SimpleHTTPRequestHandler):
             </head>
             <body>
                 <h1>Ultra Advanced Gold Price Predictor and Paper Trader</h1>
-                <p>Latest gold price: <span class="price">${latest_price:.2f}</span> (as of {latest_date})</p>
+                <p>Background AI Status: {bg_status}</p>
+                <p>Latest gold price: <span class="price">${latest_price}</span> (as of {latest_date})</p>
                 <h2>Paper Trading Portfolio:</h2>
-                <p>Portfolio Value: <span class="value">${portfolio_value:.2f}</span></p>
-                <p>Cash Balance: <span class="value">${balance:.2f}</span></p>
-                <p>Gold Holdings: <span class="value">{gold_holdings:.2f} oz</span></p>
+                <p>Portfolio Value: <span class="value">${portfolio_value}</span></p>
+                <p>Cash Balance: <span class="value">${balance}</span></p>
+                <p>Gold Holdings: <span class="value">{gold_holdings} oz</span></p>
                 <h2>Recent Trades (Last 24 Hours):</h2>
                 <table>
                     <tr>
