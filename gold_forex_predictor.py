@@ -17,6 +17,7 @@ import nltk
 import requests
 from alpha_vantage.timeseries import TimeSeries
 from alpha_vantage.foreignexchange import ForeignExchange
+from alpha_vantage.cryptocurrencies import CryptoCurrencies
 
 nltk.download('vader_lexicon', quiet=True)
 
@@ -27,7 +28,6 @@ logging.basicConfig(filename='gold_forex_predictor.log', level=logging.INFO,
 ALPHA_VANTAGE_API_KEY = "PIFHGHQNBWL37L0T"
 CURRENTS_API_KEY = "IEfpA5hCrH6Xh4E9f7R0jEOHcEjxSI8k6s71NwcYXRPqtohR"
 EXCHANGE_RATES_API_KEY = "977aa5b8e6b88d6e1d0c82ce1aabe665"
-OPEN_EXCHANGE_RATES_API_KEY = "YOUR_OPEN_EXCHANGE_RATES_API_KEY"  # You'll need to sign up for a free account to get this
 
 def fetch_all_data(start_date=None, end_date=None):
     if start_date is None:
@@ -38,90 +38,64 @@ def fetch_all_data(start_date=None, end_date=None):
     gold = yf.Ticker("GC=F")
     gold_data = gold.history(start=start_date, end=end_date)
 
-    # Fetch forex data from exchangeratesapi.io
+    # Fetch forex data from Alpha Vantage
     fx_data = fetch_forex_data(start_date, end_date)
 
-    # Fetch additional economic data from Open Exchange Rates
-    oer_data = fetch_open_exchange_rates_data(end_date)
+    # Fetch additional economic data from Alpha Vantage
+    economic_data = fetch_economic_data()
+
+    # Fetch crypto data as an additional indicator
+    crypto_data = fetch_crypto_data()
 
     return {
         'Gold': gold_data['Close'],
-        'EUR/USD': fx_data['EUR'],
-        'GBP/USD': fx_data['GBP'],
-        'JPY/USD': 1 / fx_data['JPY'],
-        'Additional_FX': fx_data,
-        'OER_Data': oer_data
+        'Forex': fx_data,
+        'Economic': economic_data,
+        'Crypto': crypto_data
     }
 
 def fetch_forex_data(start_date, end_date):
-    base_url = "http://api.exchangeratesapi.io/v1/"
-    params = {
-        "access_key": EXCHANGE_RATES_API_KEY,
-        "base": "USD",
-        "symbols": "EUR,GBP,JPY"
-    }
-    
-    forex_data = {}
-    current_date = start_date
-    while current_date <= end_date:
-        date_str = current_date.strftime("%Y-%m-%d")
-        response = requests.get(f"{base_url}{date_str}", params=params)
-        if response.status_code == 200:
-            data = response.json()
-            forex_data[date_str] = data['rates']
-        else:
-            logging.error(f"Failed to fetch forex data for {date_str}: {response.status_code}")
-        current_date += timedelta(days=1)
-    
-    return pd.DataFrame.from_dict(forex_data, orient='index')
-
-def fetch_open_exchange_rates_data(date):
-    base_url = "https://openexchangerates.org/api/"
-    endpoints = ["latest.json", "usage.json"]
-    params = {
-        "app_id": OPEN_EXCHANGE_RATES_API_KEY,
-        "base": "USD",
-        "symbols": "EUR,GBP,JPY"
-    }
-
-    oer_data = {}
-    for endpoint in endpoints:
-        response = requests.get(f"{base_url}{endpoint}", params=params)
-        if response.status_code == 200:
-            data = response.json()
-            oer_data[endpoint.split('.')[0]] = data
-        else:
-            logging.error(f"Failed to fetch Open Exchange Rates data from {endpoint}: {response.status_code}")
-
-    return oer_data
-
-def fetch_economic_indicators(start_date, end_date):
-    ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
     fx = ForeignExchange(key=ALPHA_VANTAGE_API_KEY)
+    currency_pairs = ['EURUSD', 'GBPUSD', 'USDJPY']
+    fx_data = {}
 
-    # Fetch GDP growth rate (quarterly)
-    gdp_data, _ = ts.get_global_quote('GDP')
-    
-    # Fetch inflation rate (monthly)
-    cpi_data, _ = ts.get_global_quote('CPI')
-    
-    # Fetch interest rates (daily)
-    interest_rate_data, _ = fx.get_currency_exchange_daily('USD', 'EUR')  # Using EUR/USD as a proxy for interest rate differentials
+    for pair in currency_pairs:
+        data, _ = fx.get_currency_exchange_daily(from_symbol=pair[:3], to_symbol=pair[3:], outputsize='full')
+        fx_data[pair] = data['4. close'].astype(float)
+        fx_data[pair].index = pd.to_datetime(fx_data[pair].index)
+        fx_data[pair] = fx_data[pair].loc[start_date:end_date]
 
-    # Combine and resample data to daily frequency
-    indicators = pd.concat([gdp_data, cpi_data, interest_rate_data], axis=1)
-    indicators = indicators.resample('D').ffill()
+    return pd.DataFrame(fx_data)
 
-    # Trim to the specified date range
-    indicators = indicators.loc[start_date:end_date]
+def fetch_economic_data():
+    ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+    indicators = ['GDP', 'REAL_GDP', 'CPI', 'INFLATION', 'RETAIL_SALES', 'DURABLES', 'UNEMPLOYMENT', 'NONFARM_PAYROLL']
+    economic_data = {}
 
-    return indicators
+    for indicator in indicators:
+        data, _ = ts.get_economic_indicator(indicator)
+        economic_data[indicator] = data['value'].astype(float)
+        economic_data[indicator].index = pd.to_datetime(economic_data[indicator].index)
+
+    return pd.DataFrame(economic_data)
+
+def fetch_crypto_data():
+    cc = CryptoCurrencies(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+    cryptos = ['BTC', 'ETH']
+    crypto_data = {}
+
+    for crypto in cryptos:
+        data, _ = cc.get_digital_currency_daily(symbol=crypto, market='USD')
+        crypto_data[crypto] = data['4a. close (USD)'].astype(float)
+        crypto_data[crypto].index = pd.to_datetime(crypto_data[crypto].index)
+
+    return pd.DataFrame(crypto_data)
 
 def fetch_news_sentiment(start_date, end_date):
     # Use Currents API to fetch relevant news articles
     url = f"https://api.currentsapi.services/v1/search"
     params = {
-        "keywords": "forex,gold,currency,economy",
+        "keywords": "forex,gold,currency,economy,cryptocurrency",
         "language": "en",
         "start_date": start_date.strftime("%Y-%m-%d"),
         "end_date": end_date.strftime("%Y-%m-%d"),
@@ -180,23 +154,12 @@ def add_advanced_features(df):
     
     return df
 
-def prepare_data(data, economic_indicators, news_sentiment):
+def prepare_data(data, news_sentiment):
     df = pd.DataFrame(data['Gold'])
-    df = df.join(economic_indicators)
+    df = df.join(data['Forex'])
+    df = df.join(data['Economic'])
+    df = df.join(data['Crypto'])
     df = df.join(news_sentiment)
-    
-    # Add forex data
-    for currency, values in data['Additional_FX'].items():
-        df[f'{currency}_rate'] = values
-    
-    # Add Open Exchange Rates data
-    oer_data = data['OER_Data']
-    if 'latest' in oer_data:
-        for currency, rate in oer_data['latest']['rates'].items():
-            df[f'OER_{currency}_rate'] = rate
-    if 'usage' in oer_data:
-        df['OER_requests'] = oer_data['usage']['requests']
-        df['OER_requests_remaining'] = oer_data['usage']['requests_remaining']
     
     df = add_advanced_features(df)
     df = df.dropna()
