@@ -26,7 +26,6 @@ logging.basicConfig(filename='gold_forex_predictor.log', level=logging.INFO,
 # API keys
 ALPHA_VANTAGE_API_KEY = "PIFHGHQNBWL37L0T"
 CURRENTS_API_KEY = "IEfpA5hCrH6Xh4E9f7R0jEOHcEjxSI8k6s71NwcYXRPqtohR"
-EXCHANGE_RATES_API_KEY = "7b6956d98e159bf955f8c766"  # Free tier key for exchangeratesapi.io
 FMP_API_KEY = "3667d5a89d6b4d5a66cc0301258ba80c"  # Free tier key for financialmodelingprep.com
 
 def fetch_all_data(start_date=None, end_date=None):
@@ -45,8 +44,8 @@ def fetch_all_data(start_date=None, end_date=None):
         currency = yf.Ticker(pair)
         fx_data[pair] = currency.history(start=start_date, end=end_date)
 
-    # Fetch additional forex data from Exchange Rates API
-    fx_data_additional = fetch_forex_data(start_date, end_date)
+    # Fetch additional forex data from Free Forex API
+    fx_data_additional = fetch_forex_data()
 
     return {
         'Gold': gold_data['Close'],
@@ -56,25 +55,24 @@ def fetch_all_data(start_date=None, end_date=None):
         'Additional_FX': fx_data_additional
     }
 
-def fetch_forex_data(start_date, end_date):
-    base_url = "https://api.exchangeratesapi.io/v1/"
+def fetch_forex_data():
+    base_url = "https://www.freeforexapi.com/api/live"
     params = {
-        "access_key": EXCHANGE_RATES_API_KEY,
-        "base": "USD",
-        "symbols": "EUR,GBP,JPY"
+        "pairs": "EURUSD,GBPUSD,USDJPY"
     }
     
-    forex_data = {}
-    current_date = start_date
-    while current_date <= end_date:
-        date_str = current_date.strftime("%Y-%m-%d")
-        response = requests.get(f"{base_url}{date_str}", params=params)
-        if response.status_code == 200:
-            data = response.json()
-            forex_data[date_str] = data['rates']
-        current_date += timedelta(days=1)
-    
-    return pd.DataFrame.from_dict(forex_data, orient='index')
+    response = requests.get(base_url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        forex_data = {
+            'EUR/USD': data['rates']['EURUSD']['rate'],
+            'GBP/USD': data['rates']['GBPUSD']['rate'],
+            'USD/JPY': data['rates']['USDJPY']['rate']
+        }
+        return pd.DataFrame([forex_data])
+    else:
+        logging.error(f"Failed to fetch forex data: {response.status_code}")
+        return pd.DataFrame()
 
 def fetch_economic_indicators(start_date, end_date):
     ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
