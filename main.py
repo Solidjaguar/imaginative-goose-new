@@ -1,46 +1,75 @@
-from datetime import datetime, timedelta
-import random
+import urllib.request
 import json
+from datetime import datetime, timedelta
 
-def generate_simulated_data(days=30):
-    end_date = datetime.now()
-    data = []
-    price = 1800  # Starting price around $1800 per ounce
-    
-    for i in range(days):
-        date = end_date - timedelta(days=i)
-        price += random.uniform(-10, 10)  # Random daily change between -$10 and $10
-        data.append({
-            'date': date.strftime('%Y-%m-%d'),
-            'price': round(price, 2)
-        })
-    
-    return data
+API_KEY = "demo"  # Replace with your Alpha Vantage API key for more frequent updates
+BASE_URL = "https://www.alphavantage.co/query"
 
-def simple_prediction(data):
-    if len(data) < 2:
+def fetch_gold_data():
+    url = f"{BASE_URL}?function=GOLD&apikey={API_KEY}"
+    
+    try:
+        with urllib.request.urlopen(url) as response:
+            data = json.loads(response.read().decode())
+        
+        if 'data' not in data:
+            print(f"Unexpected API response: {data}")
+            return []
+        
+        return data['data']
+    except Exception as e:
+        print(f"Error fetching data: {str(e)}")
+        return []
+
+def calculate_sma(data, window):
+    if len(data) < window:
+        return None
+    return sum(float(d['price']) for d in data[:window]) / window
+
+def calculate_ema(data, window):
+    if len(data) < window:
+        return None
+    
+    prices = [float(d['price']) for d in data[:window]]
+    ema = sum(prices) / window
+    multiplier = 2 / (window + 1)
+    
+    for price in prices[window:]:
+        ema = (price - ema) * multiplier + ema
+    
+    return ema
+
+def predict_price(data):
+    if len(data) < 5:
+        return None
+    
+    sma_5 = calculate_sma(data, 5)
+    ema_5 = calculate_ema(data, 5)
+    
+    if sma_5 is None or ema_5 is None:
         return None
     
     last_price = float(data[0]['price'])
-    prev_price = float(data[1]['price'])
+    prediction = (sma_5 + ema_5) / 2
     
-    if last_price > prev_price:
-        return round(last_price * 1.01, 2)  # Predict 1% increase
-    else:
-        return round(last_price * 0.99, 2)  # Predict 1% decrease
+    return round(prediction, 2)
 
 def main():
-    gold_data = generate_simulated_data()
-    prediction = simple_prediction(gold_data)
+    gold_data = fetch_gold_data()
+    
+    if not gold_data:
+        return json.dumps({"error": "Failed to fetch gold data"})
+    
+    prediction = predict_price(gold_data)
     
     result = {
-        'latest_price': gold_data[0]['price'],
+        'latest_price': float(gold_data[0]['price']),
         'latest_date': gold_data[0]['date'],
         'prediction': prediction,
-        'historical_data': gold_data
+        'historical_data': [{'date': d['date'], 'price': float(d['price'])} for d in gold_data]
     }
     
-    print(json.dumps(result))
+    return json.dumps(result)
 
 if __name__ == "__main__":
-    main()
+    print(main())
