@@ -1,214 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forex Predictor Dashboard</title>
+    <title>Gold Price Predictor and Paper Trader</title>
+    <meta http-equiv="refresh" content="60">
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-        h1, h2, h3 { color: #333; }
-        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        img { max-width: 100%; height: auto; }
-        .metrics { display: flex; justify-content: space-around; margin-bottom: 20px; }
-        .metric { text-align: center; }
-        .metric-value { font-size: 24px; font-weight: bold; }
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }}
+        h1, h2 {{ color: #333; }}
+        .price {{ font-size: 24px; font-weight: bold; color: #4CAF50; }}
+        table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
+        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+        th {{ background-color: #4CAF50; color: white; }}
     </style>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
-    <h1>Forex Predictor Dashboard</h1>
-    
-    <h2>Model Performance Metrics</h2>
-    <div class="metrics">
-        {% if metrics %}
-            <div class="metric">
-                <div>Mean Squared Error</div>
-                <div class="metric-value">{{ "%.6f"|format(metrics.MSE) }}</div>
-            </div>
-            <div class="metric">
-                <div>Root Mean Squared Error</div>
-                <div class="metric-value">{{ "%.6f"|format(metrics.RMSE) }}</div>
-            </div>
-            <div class="metric">
-                <div>Mean Absolute Error</div>
-                <div class="metric-value">{{ "%.6f"|format(metrics.MAE) }}</div>
-            </div>
-            <div class="metric">
-                <div>R-squared</div>
-                <div class="metric-value">{{ "%.6f"|format(metrics.R2) }}</div>
-            </div>
-        {% else %}
-            <p>Not enough data to calculate metrics yet.</p>
-        {% endif %}
-    </div>
-    
-    {% if cv_scores %}
-    <h2>Cross-Validation Scores</h2>
+    <h1>Gold Price Predictor and Paper Trader</h1>
+    <p>Current gold price: <span class="price">${latest_price}</span></p>
+    <h2>Predictions:</h2>
     <table>
-        <tr>
-            <th>Metric</th>
-            <th>Mean</th>
-            <th>Standard Deviation</th>
-        </tr>
-        <tr>
-            <td>Mean Squared Error</td>
-            <td>{{ "%.6f"|format(cv_scores.mse.mean) }}</td>
-            <td>{{ "%.6f"|format(cv_scores.mse.std) }}</td>
-        </tr>
-        <tr>
-            <td>Mean Absolute Error</td>
-            <td>{{ "%.6f"|format(cv_scores.mae.mean) }}</td>
-            <td>{{ "%.6f"|format(cv_scores.mae.std) }}</td>
-        </tr>
-        <tr>
-            <td>R-squared</td>
-            <td>{{ "%.6f"|format(cv_scores.r2.mean) }}</td>
-            <td>{{ "%.6f"|format(cv_scores.r2.std) }}</td>
-        </tr>
+        <tr><th>Date</th><th>Predicted Price</th></tr>
+        {predictions}
     </table>
-    {% endif %}
-    
-    <h2>Predictions Chart</h2>
-    <img src="data:image/png;base64,{{ plot_url }}" alt="Predictions vs Actual Chart">
-    
-    {% if feature_importance %}
-    <h2>Feature Importance</h2>
-    <img src="data:image/png;base64,{{ feature_importance }}" alt="Feature Importance Chart">
-    {% endif %}
-    
-    <h2>Paper Trading Results</h2>
-    <div id="paperTradingChart"></div>
-    
-    <h2>Performance Metrics</h2>
-    <table id="performanceMetrics">
-        <tr>
-            <th>Metric</th>
-            <th>Value</th>
-        </tr>
-    </table>
-    
-    <h2>Latest Trade History</h2>
-    <table id="tradeHistory">
-        <tr>
-            <th>Timestamp</th>
-            <th>Currency Pair</th>
-            <th>Action</th>
-            <th>Amount</th>
-            <th>Price</th>
-            <th>Cost</th>
-        </tr>
-    </table>
-    
-    <h2>Latest Predictions</h2>
+    <h2>Paper Trading Portfolio:</h2>
+    <p>Portfolio Value: ${portfolio_value:.2f}</p>
+    <p>Cash Balance: ${balance:.2f}</p>
+    <p>Gold Holdings: {gold_holdings:.4f} oz</p>
+    <h2>Recent Trades:</h2>
     <table>
-        <tr>
-            <th>Date</th>
-            <th>EUR/USD Prediction</th>
-            <th>GBP/USD Prediction</th>
-            <th>JPY/USD Prediction</th>
-        </tr>
-        {% for prediction in predictions[-5:] %}
-        <tr>
-            <td>{{ prediction.timestamp }}</td>
-            <td>{{ "%.6f"|format(prediction.prediction[0]) }}</td>
-            <td>{{ "%.6f"|format(prediction.prediction[1]) }}</td>
-            <td>{{ "%.6f"|format(prediction.prediction[2]) }}</td>
-        </tr>
-        {% endfor %}
+        <tr><th>Date</th><th>Type</th><th>Price</th><th>Amount</th></tr>
+        {recent_trades}
     </table>
-    
-    <h2>Historical Predictions vs Actual</h2>
-    <table>
-        <tr>
-            <th>Date</th>
-            <th>EUR/USD Predicted</th>
-            <th>EUR/USD Actual</th>
-            <th>GBP/USD Predicted</th>
-            <th>GBP/USD Actual</th>
-            <th>JPY/USD Predicted</th>
-            <th>JPY/USD Actual</th>
-        </tr>
-        {% for prediction in predictions[-10:] if prediction.actual %}
-        <tr>
-            <td>{{ prediction.timestamp }}</td>
-            <td>{{ "%.6f"|format(prediction.prediction[0]) }}</td>
-            <td>{{ "%.6f"|format(prediction.actual[0]) }}</td>
-            <td>{{ "%.6f"|format(prediction.prediction[1]) }}</td>
-            <td>{{ "%.6f"|format(prediction.actual[1]) }}</td>
-            <td>{{ "%.6f"|format(prediction.prediction[2]) }}</td>
-            <td>{{ "%.6f"|format(prediction.actual[2]) }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-
-    <script>
-        function updatePaperTradingResults() {
-            fetch('/paper_trading_update')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        console.error(data.error);
-                        return;
-                    }
-                    
-                    // Update portfolio value chart
-                    var trace = {
-                        x: data.paper_trading_results.portfolio_values.map(d => d.timestamp),
-                        y: data.paper_trading_results.portfolio_values.map(d => d.value),
-                        type: 'scatter'
-                    };
-                    var layout = {
-                        title: 'Paper Trading Portfolio Value',
-                        xaxis: { title: 'Date' },
-                        yaxis: { title: 'Portfolio Value' }
-                    };
-                    Plotly.newPlot('paperTradingChart', [trace], layout);
-                    
-                    // Update trade history table
-                    var tradeHistoryTable = document.getElementById('tradeHistory');
-                    tradeHistoryTable.innerHTML = `
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Currency Pair</th>
-                            <th>Action</th>
-                            <th>Amount</th>
-                            <th>Price</th>
-                            <th>Cost</th>
-                        </tr>
-                    `;
-                    data.paper_trading_results.trade_history.slice(-10).forEach(trade => {
-                        var row = tradeHistoryTable.insertRow(-1);
-                        row.insertCell(0).textContent = trade.timestamp;
-                        row.insertCell(1).textContent = trade.currency_pair;
-                        row.insertCell(2).textContent = trade.action;
-                        row.insertCell(3).textContent = trade.amount.toFixed(4);
-                        row.insertCell(4).textContent = trade.price.toFixed(4);
-                        row.insertCell(5).textContent = trade.cost.toFixed(4);
-                    });
-                    
-                    // Update performance metrics table
-                    var performanceMetricsTable = document.getElementById('performanceMetrics');
-                    performanceMetricsTable.innerHTML = `
-                        <tr>
-                            <th>Metric</th>
-                            <th>Value</th>
-                        </tr>
-                    `;
-                    for (let [metric, value] of Object.entries(data.performance_report)) {
-                        var row = performanceMetricsTable.insertRow(-1);
-                        row.insertCell(0).textContent = metric;
-                        row.insertCell(1).textContent = typeof value === 'number' ? value.toFixed(4) : value;
-                    }
-                });
-        }
-        
-        // Update paper trading results every 5 minutes
-        setInterval(updatePaperTradingResults, 300000);
-        
-        // Initial update
-        updatePaperTradingResults();
-    </script>
+    <h2>Gold Price Prediction Chart:</h2>
+    <img src="/static/gold_predictions.png" alt="Gold Price Predictions">
 </body>
 </html>

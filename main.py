@@ -1,41 +1,52 @@
 import json
+from src.data_fetcher import fetch_gold_data
+from src.data_processor import prepare_data
+from src.model_trainer import train_models
+from src.predictor import predict_price
+from src.visualizer import plot_predictions
 from paper_trader import paper_trader
-from advanced_gold_predictor import get_latest_predictions
-from performance_metrics import calculate_metrics
-from risk_management import get_risk_assessment
 
 def main():
     try:
-        with open('predictions.json', 'r') as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        return json.dumps({"error": "Predictions not available yet"})
+        # Fetch and prepare data
+        gold_data = fetch_gold_data()
+        prepared_data = prepare_data(gold_data)
 
-    latest_price = data['latest_price']
-    predictions = data['predictions']
-    
-    # Get advanced predictions
-    advanced_predictions = get_latest_predictions()
-    
-    # Calculate performance metrics
-    metrics = calculate_metrics(paper_trader.trades)
-    
-    # Get risk assessment
-    risk_assessment = get_risk_assessment(latest_price, advanced_predictions)
-    
-    result = {
-        'latest_price': latest_price,
-        'predictions': predictions,
-        'advanced_predictions': advanced_predictions,
-        'portfolio_value': paper_trader.get_portfolio_value(latest_price),
-        'recent_trades': paper_trader.get_recent_trades(),
-        'balance': paper_trader.balance,
-        'gold_holdings': paper_trader.gold_holdings,
-        'performance_metrics': metrics,
-        'risk_assessment': risk_assessment
-    }
-    
-    return json.dumps(result, default=str)
+        # Train models
+        models = train_models(prepared_data)
+
+        # Make predictions
+        predictions = predict_price(models, prepared_data)
+
+        # Plot predictions
+        plot_predictions(prepared_data, predictions)
+
+        # Get current price (last known price)
+        latest_price = float(prepared_data.iloc[-1])
+
+        # Paper trading logic
+        if predictions.iloc[0] > latest_price:
+            amount_to_buy = min(1000 / latest_price, paper_trader.balance / latest_price)
+            if amount_to_buy > 0:
+                paper_trader.buy(latest_price, amount_to_buy)
+        elif predictions.iloc[0] < latest_price:
+            amount_to_sell = min(1, paper_trader.gold_holdings)
+            if amount_to_sell > 0:
+                paper_trader.sell(latest_price, amount_to_sell)
+
+        result = {
+            'latest_price': latest_price,
+            'predictions': predictions.to_dict(),
+            'portfolio_value': paper_trader.get_portfolio_value(latest_price),
+            'recent_trades': paper_trader.get_recent_trades(),
+            'balance': paper_trader.balance,
+            'gold_holdings': paper_trader.gold_holdings
+        }
+
+        return json.dumps(result, default=str)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 if __name__ == "__main__":
     print(main())

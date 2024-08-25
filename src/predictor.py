@@ -1,27 +1,15 @@
-import pandas as pd
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
 
-def make_predictions(model, X_test):
-    return model.predict(X_test)
+def predict_price(models, data, steps=7):
+    arima_model = models['arima']
+    rf_model = models['rf']
 
-def evaluate_predictions(y_true, y_pred):
-    mse = mean_squared_error(y_true, y_pred)
-    rmse = np.sqrt(mse)
-    mae = mean_absolute_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
-    
-    return {
-        'MSE': mse,
-        'RMSE': rmse,
-        'MAE': mae,
-        'R2': r2
-    }
+    arima_forecast = arima_model.forecast(steps=steps)
+    last_date = data.index[-1]
+    future_dates = [last_date + timedelta(days=i) for i in range(1, steps+1)]
+    rf_forecast = rf_model.predict(np.array(range(len(data), len(data)+steps)).reshape(-1, 1))
 
-def save_predictions(y_true, y_pred, config):
-    predictions_df = pd.DataFrame({
-        'Actual': y_true,
-        'Predicted': y_pred
-    })
-    predictions_df.to_csv(config['paths']['predictions'], index=True)
-    return predictions_df
+    ensemble_forecast = (arima_forecast + rf_forecast) / 2
+    return pd.Series(ensemble_forecast, index=future_dates)
