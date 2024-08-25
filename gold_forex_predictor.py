@@ -3,13 +3,16 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import os
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, TimeSeriesSplit
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import joblib
 import json
 import pandas_ta as ta
 import logging
+import matplotlib.pyplot as plt
+import io
+import base64
 
 # Set up logging
 logging.basicConfig(filename='forex_predictor.log', level=logging.INFO,
@@ -82,17 +85,34 @@ def prepare_data(data):
     
     return X, y
 
-def train_model(X, y):
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
+def train_model_with_cv(X, y):
+    tscv = TimeSeriesSplit(n_splits=5)
     model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
     
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
-    logging.info(f"Mean Squared Error: {mse}")
+    cv_scores = {
+        'mse': [],
+        'mae': [],
+        'r2': []
+    }
     
-    return model
+    for train_index, test_index in tscv.split(X):
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+        
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        
+        cv_scores['mse'].append(mean_squared_error(y_test, y_pred))
+        cv_scores['mae'].append(mean_absolute_error(y_test, y_pred))
+        cv_scores['r2'].append(r2_score(y_test, y_pred))
+    
+    logging.info(f"Cross-validation scores - MSE: {np.mean(cv_scores['mse']):.6f} (±{np.std(cv_scores['mse']):.6f})")
+    logging.info(f"Cross-validation scores - MAE: {np.mean(cv_scores['mae']):.6f} (±{np.std(cv_scores['mae']):.6f})")
+    logging.info(f"Cross-validation scores - R2: {np.mean(cv_scores['r2']):.6f} (±{np.std(cv_scores['r2']):.6f})")
+    
+    # Train final model on all data
+    model.fit(X, y)
+    return model, cv_scores
 
 def save_model(model, filename):
     joblib.dump(model, filename)
@@ -132,9 +152,33 @@ def evaluate_predictions():
     
     if len(actual_values) > 0:
         mse = mean_squared_error(actual_values, predicted_values)
-        logging.info(f"Mean Squared Error of predictions: {mse}")
+        mae = mean_absolute_error(actual_values, predicted_values)
+        r2 = r2_score(actual_values, predicted_values)
+        logging.info(f"Prediction Performance - MSE: {mse:.6f}, MAE: {mae:.6f}, R2: {r2:.6f}")
     else:
         logging.info("Not enough data to evaluate predictions yet.")
+
+def plot_feature_importance(model, X):
+    feature_importance = model.feature_importances_
+    sorted_idx = np.argsort(feature_importance)
+    pos = np.arange(sorted_idx.shape[0]) + .5
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.barh(pos, feature_importance[sorted_idx], align='center')
+    ax.set_yticks(pos)
+    ax.set_yticklabels(X.columns[sorted_idx])
+    ax.set_xlabel('Feature Importance')
+    ax.set_title('Random Forest Feature Importance')
+    
+    img = io.BytesIO()
+    plt.savefig(img, format='png', bbox_inches='tight')
+    img.seek(0)
+    
+    feature_importance_plot = base64.b64encode(img.getvalue()).decode()
+    
+    plt.close()
+    
+    return feature_importance_plot
 
 def main():
     try:
@@ -146,13 +190,16 @@ def main():
         # Prepare data for modeling
         X, y = prepare_data(data)
         
-        # Check if model exists, if not, train a new one
-        if os.path.exists(model_filename):
-            model = load_model(model_filename)
-            logging.info("Loaded existing model.")
-        else:
-            model = train_model(X, y)
-            save_model(model, model_filename)
+        # Train model with cross-validation
+        model, cv_scores = train_model_with_cv(X, y)
+        save_model(model, model_filename)
+        
+        # Generate feature importance plot
+        feature_importance_plot = plot_feature_importance(model, X)
+        
+        # Save feature importance plot
+        with open('feature_importance.txt', 'w') as f:
+            f.write(feature_importance_plot)
         
         # Make a prediction for the next day
         latest_data = X.iloc[-1].values

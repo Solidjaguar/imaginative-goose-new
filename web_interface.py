@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 import base64
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
 
 app = Flask(__name__)
@@ -43,13 +43,29 @@ def calculate_metrics(predictions):
     if len(actual_values) > 0:
         mse = mean_squared_error(actual_values, predicted_values)
         rmse = np.sqrt(mse)
-        mae = np.mean(np.abs(np.array(actual_values) - np.array(predicted_values)))
+        mae = mean_absolute_error(actual_values, predicted_values)
+        r2 = r2_score(actual_values, predicted_values)
         return {
             'MSE': mse,
             'RMSE': rmse,
-            'MAE': mae
+            'MAE': mae,
+            'R2': r2
         }
     else:
+        return None
+
+def load_cv_scores():
+    try:
+        with open('cv_scores.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+def load_feature_importance():
+    try:
+        with open('feature_importance.txt', 'r') as f:
+            return f.read()
+    except FileNotFoundError:
         return None
 
 @app.route('/')
@@ -57,7 +73,9 @@ def index():
     predictions = load_predictions()
     plot_url = create_plot()
     metrics = calculate_metrics(predictions)
-    return render_template('index.html', predictions=predictions, plot_url=plot_url, metrics=metrics)
+    cv_scores = load_cv_scores()
+    feature_importance = load_feature_importance()
+    return render_template('index.html', predictions=predictions, plot_url=plot_url, metrics=metrics, cv_scores=cv_scores, feature_importance=feature_importance)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

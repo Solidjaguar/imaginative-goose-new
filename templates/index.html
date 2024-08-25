@@ -34,13 +34,48 @@
                 <div>Mean Absolute Error</div>
                 <div class="metric-value">{{ "%.6f"|format(metrics.MAE) }}</div>
             </div>
+            <div class="metric">
+                <div>R-squared</div>
+                <div class="metric-value">{{ "%.6f"|format(metrics.R2) }}</div>
+            </div>
         {% else %}
             <p>Not enough data to calculate metrics yet.</p>
         {% endif %}
     </div>
     
+    {% if cv_scores %}
+    <h2>Cross-Validation Scores</h2>
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Mean</th>
+            <th>Standard Deviation</th>
+        </tr>
+        <tr>
+            <td>Mean Squared Error</td>
+            <td>{{ "%.6f"|format(cv_scores.mse.mean) }}</td>
+            <td>{{ "%.6f"|format(cv_scores.mse.std) }}</td>
+        </tr>
+        <tr>
+            <td>Mean Absolute Error</td>
+            <td>{{ "%.6f"|format(cv_scores.mae.mean) }}</td>
+            <td>{{ "%.6f"|format(cv_scores.mae.std) }}</td>
+        </tr>
+        <tr>
+            <td>R-squared</td>
+            <td>{{ "%.6f"|format(cv_scores.r2.mean) }}</td>
+            <td>{{ "%.6f"|format(cv_scores.r2.std) }}</td>
+        </tr>
+    </table>
+    {% endif %}
+    
     <h2>Predictions Chart</h2>
     <img src="data:image/png;base64,{{ plot_url }}" alt="Predictions vs Actual Chart">
+    
+    {% if feature_importance %}
+    <h2>Feature Importance</h2>
+    <img src="data:image/png;base64,{{ feature_importance }}" alt="Feature Importance Chart">
+    {% endif %}
     
     <h2>Latest Predictions</h2>
     <table>
