@@ -63,11 +63,4 @@ class PaperTrader:
         cutoff_date = datetime.now() - timedelta(hours=hours)
         return [trade for trade in self.trades if datetime.fromisoformat(trade['date']) > cutoff_date]
 
-    def get_state(self):
-        return {
-            'balance': self.balance,
-            'gold_holdings': self.gold_holdings,
-            'trades': self.trades
-        }
-
 paper_trader = PaperTrader()

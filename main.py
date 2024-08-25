@@ -3,25 +3,21 @@ from paper_trader import paper_trader
 
 def main():
     try:
-        with open('latest_predictions.json', 'r') as f:
+        with open('predictions.json', 'r') as f:
             data = json.load(f)
     except FileNotFoundError:
         return json.dumps({"error": "Predictions not available yet"})
 
     latest_price = data['latest_price']
-    latest_date = data['latest_date']
-    prediction_data = data['prediction_data']
-    learning_progress = data.get('learning_progress', {})
+    predictions = data['predictions']
     
     result = {
         'latest_price': latest_price,
-        'latest_date': latest_date,
-        'prediction_data': prediction_data,
+        'predictions': predictions,
         'portfolio_value': paper_trader.get_portfolio_value(latest_price),
-        'recent_trades': paper_trader.get_recent_trades(hours=24),
+        'recent_trades': paper_trader.get_recent_trades(),
         'balance': paper_trader.balance,
-        'gold_holdings': paper_trader.gold_holdings,
-        'learning_progress': learning_progress
+        'gold_holdings': paper_trader.gold_holdings
     }
     
     return json.dumps(result, default=str)
