@@ -1,0 +1,34 @@
+api_keys:
+  alpha_vantage: "PIFHGHQNBWL37L0T"
+  currents: "IEfpA5hCrH6Xh4E9f7R0jEOHcEjxSI8k6s71NwcYXRPqtohR"
+  exchange_rates: "977aa5b8e6b88d6e1d0c82ce1aabe665"
+
+data:
+  lookback_years: 5
+  prediction_days: 30
+
+model:
+  type: "RandomForest"
+  params:
+    n_estimators: 100
+    random_state: 42
+
+features:
+  technical_indicators:
+    - "SMA"
+    - "EMA"
+    - "MACD"
+    - "RSI"
+    - "BollingerBands"
+  lagged_features:
+    - 1
+    - 7
+  return_features:
+    - "Returns"
+    - "LogReturns"
+
+paths:
+  model: "models/trained_model.joblib"
+  scaler: "models/scaler.joblib"
+  predictions: "data/latest_predictions.csv"
+  logs: "logs/gold_forex_predictor.log"
