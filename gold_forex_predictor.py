@@ -26,7 +26,7 @@ logging.basicConfig(filename='gold_forex_predictor.log', level=logging.INFO,
 # API keys
 ALPHA_VANTAGE_API_KEY = "PIFHGHQNBWL37L0T"
 CURRENTS_API_KEY = "IEfpA5hCrH6Xh4E9f7R0jEOHcEjxSI8k6s71NwcYXRPqtohR"
-FMP_API_KEY = "3667d5a89d6b4d5a66cc0301258ba80c"  # Free tier key for financialmodelingprep.com
+FMP_API_KEY = "977aa5b8e6b88d6e1d0c82ce1aabe665"  # Updated Financial Modeling Prep API key
 
 def fetch_all_data(start_date=None, end_date=None):
     if start_date is None:
@@ -119,6 +119,7 @@ def fetch_economic_calendar(start_date, end_date):
             'actual': 'count'
         }).rename(columns={'actual': 'event_count'})
     else:
+        logging.error(f"Failed to fetch economic calendar: {response.status_code}")
         return pd.DataFrame()
 
 def fetch_news_sentiment(start_date, end_date):
@@ -132,28 +133,31 @@ def fetch_news_sentiment(start_date, end_date):
         "apiKey": CURRENTS_API_KEY
     }
     response = requests.get(url, params=params)
-    news_data = response.json()
+    if response.status_code == 200:
+        news_data = response.json()
+        # Perform sentiment analysis on the news articles
+        sia = SentimentIntensityAnalyzer()
+        sentiments = []
+        dates = []
 
-    # Perform sentiment analysis on the news articles
-    sia = SentimentIntensityAnalyzer()
-    sentiments = []
-    dates = []
+        for article in news_data['news']:
+            sentiment = sia.polarity_scores(article['title'] + ' ' + article['description'])
+            sentiments.append(sentiment['compound'])
+            dates.append(article['published'][:10])  # Extract date from datetime string
 
-    for article in news_data['news']:
-        sentiment = sia.polarity_scores(article['title'] + ' ' + article['description'])
-        sentiments.append(sentiment['compound'])
-        dates.append(article['published'][:10])  # Extract date from datetime string
+        sentiment_df = pd.DataFrame({'date': dates, 'sentiment': sentiments})
+        sentiment_df['date'] = pd.to_datetime(sentiment_df['date'])
+        sentiment_df = sentiment_df.groupby('date').mean()
 
-    sentiment_df = pd.DataFrame({'date': dates, 'sentiment': sentiments})
-    sentiment_df['date'] = pd.to_datetime(sentiment_df['date'])
-    sentiment_df = sentiment_df.groupby('date').mean()
+        # Reindex to include all dates in the range
+        date_range = pd.date_range(start=start_date, end=end_date)
+        sentiment_df = sentiment_df.reindex(date_range)
+        sentiment_df = sentiment_df.fillna(method='ffill')  # Forward fill missing values
 
-    # Reindex to include all dates in the range
-    date_range = pd.date_range(start=start_date, end=end_date)
-    sentiment_df = sentiment_df.reindex(date_range)
-    sentiment_df = sentiment_df.fillna(method='ffill')  # Forward fill missing values
-
-    return sentiment_df
+        return sentiment_df
+    else:
+        logging.error(f"Failed to fetch news sentiment: {response.status_code}")
+        return pd.DataFrame()
 
 # The rest of the functions (add_advanced_features, prepare_data, train_model, make_predictions, update_actual_values, run_predictor) remain the same
 
