@@ -2,9 +2,9 @@ import yaml
 import logging
 from src.data_fetcher import fetch_all_data
 from src.data_processor import prepare_data
-from src.model_trainer import train_model
-from src.predictor import make_predictions
-from src.visualizer import plot_predictions
+from src.model_trainer import train_model, load_model
+from src.predictor import make_predictions, evaluate_predictions, save_predictions
+from src.visualizer import plot_predictions, plot_feature_importance, plot_correlation_matrix
 
 def load_config():
     with open('config/config.yaml', 'r') as file:
@@ -20,21 +20,40 @@ def main():
 
     logging.info("Starting gold and forex prediction process")
 
-    # Fetch data
-    data = fetch_all_data(config)
+    try:
+        # Fetch data
+        data = fetch_all_data(config)
+        logging.info("Data fetched successfully")
 
-    # Prepare data
-    X_train, X_test, y_train, y_test = prepare_data(data, config)
+        # Prepare data
+        X_train, X_test, y_train, y_test = prepare_data(data, config)
+        logging.info("Data prepared successfully")
 
-    # Train model
-    model, scaler = train_model(X_train, y_train, config)
+        # Train model
+        model = train_model(X_train, y_train, config)
+        logging.info("Model trained successfully")
 
-    # Make predictions
-    predictions = make_predictions(model, scaler, X_test)
+        # Make predictions
+        predictions = make_predictions(model, X_test)
+        logging.info("Predictions made successfully")
 
-    # Visualize results
-    plot_predictions(y_test, predictions, config)
+        # Evaluate predictions
+        evaluation = evaluate_predictions(y_test, predictions)
+        logging.info(f"Model evaluation: {evaluation}")
 
+        # Save predictions
+        save_predictions(y_test, predictions, config)
+        logging.info("Predictions saved successfully")
+
+        # Visualize results
+        plot_predictions(y_test, predictions, config)
+        plot_feature_importance(model, X_train.columns)
+        plot_correlation_matrix(data['Gold'].to_frame().join(data['Forex']))
+        logging.info("Visualizations created successfully")
+
+    except Exception as e:
+        logging.error(f"An error occurred: {str(e)}")
+    
     logging.info("Gold and forex prediction process completed")
 
 if __name__ == "__main__":
