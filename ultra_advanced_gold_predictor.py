@@ -13,7 +13,7 @@ from lightgbm import LGBMRegressor
 from statsmodels.tsa.arima.model import ARIMA
 from prophet import Prophet
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Bidirectional, Attention
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Bidirectional
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.regularizers import l1_l2
@@ -30,8 +30,6 @@ import shap
 from pyod.models.iforest import IForest
 import logging
 from typing import List, Dict, Tuple
-from river import linear_model, preprocessing, compose
-from scipy.stats import norm
 import joblib
 from multiprocessing import Pool, cpu_count
 from dask import dataframe as dd
@@ -51,10 +49,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Initialize APIs
-fred = fredapi.Fred(api_key='b908a65514252b6083d034c389db6ad9')
+fred = fredapi.Fred(api_key='YOUR_FRED_API_KEY')  # Replace with your actual FRED API key
 
 # Set the News API key as an environment variable
-os.environ['NEWS_API_KEY'] = '92b4a1aad8a04c6bb909892b99202d91'
+os.environ['NEWS_API_KEY'] = 'YOUR_NEWS_API_KEY'  # Replace with your actual News API key
 
 # Initialize NewsApiClient with the key from the environment variable
 newsapi = NewsApiClient(api_key=os.getenv('NEWS_API_KEY'))
@@ -276,7 +274,6 @@ def train_lstm(X: np.ndarray, y: np.ndarray) -> Sequential:
     """Train an LSTM model."""
     model = Sequential([
         Bidirectional(LSTM(64, return_sequences=True, kernel_regularizer=l1_l2(l1=1e-5, l2=1e-4))),
-        Attention(),
         Dropout(0.2),
         Dense(32, activation='relu'),
         Dropout(0.2),

@@ -5,7 +5,7 @@ scikit-learn
 xgboost
 lightgbm
 statsmodels
-prophet
+fbprophet
 tensorflow
 optuna
 scikit-optimize
@@ -16,7 +16,6 @@ matplotlib
 seaborn
 shap
 pyod
-river
 dask[complete]
 distributed
 fredapi
