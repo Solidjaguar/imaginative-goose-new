@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import random
+import json
 
 def generate_simulated_data(days=30):
     end_date = datetime.now()
@@ -11,7 +12,7 @@ def generate_simulated_data(days=30):
         price += random.uniform(-10, 10)  # Random daily change between -$10 and $10
         data.append({
             'date': date.strftime('%Y-%m-%d'),
-            'price': f'{price:.2f}'
+            'price': round(price, 2)
         })
     
     return data
@@ -24,22 +25,22 @@ def simple_prediction(data):
     prev_price = float(data[1]['price'])
     
     if last_price > prev_price:
-        return last_price * 1.01  # Predict 1% increase
+        return round(last_price * 1.01, 2)  # Predict 1% increase
     else:
-        return last_price * 0.99  # Predict 1% decrease
+        return round(last_price * 0.99, 2)  # Predict 1% decrease
 
 def main():
-    print("Generating simulated gold price data...")
     gold_data = generate_simulated_data()
-    
-    print(f"Latest simulated gold price: ${gold_data[0]['price']} USD (as of {gold_data[0]['date']})")
-    
     prediction = simple_prediction(gold_data)
     
-    if prediction:
-        print(f"Simple prediction for next price: ${prediction:.2f} USD")
-    else:
-        print("Unable to make a prediction.")
+    result = {
+        'latest_price': gold_data[0]['price'],
+        'latest_date': gold_data[0]['date'],
+        'prediction': prediction,
+        'historical_data': gold_data
+    }
+    
+    print(json.dumps(result))
 
 if __name__ == "__main__":
     main()

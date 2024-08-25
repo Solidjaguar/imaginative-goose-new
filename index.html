@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Price Predictor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #4a4a4a;
+        }
+        #prediction-container {
+            background-color: #f0f0f0;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        #chart-container {
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gold Price Predictor</h1>
+    <div id="prediction-container">
+        <h2>Latest Price: <span id="latest-price"></span></h2>
+        <h2>Prediction: <span id="prediction"></span></h2>
+    </div>
+    <div id="chart-container">
+        <canvas id="priceChart"></canvas>
+    </div>
+
+    <script>
+        async function fetchPrediction() {
+            const response = await fetch('/prediction');
+            const data = await response.json();
+            
+            document.getElementById('latest-price').textContent = `$${data.latest_price} (${data.latest_date})`;
+            document.getElementById('prediction').textContent = `$${data.prediction}`;
+
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.historical_data.map(d => d.date).reverse(),
+                    datasets: [{
+                        label: 'Gold Price (USD)',
+                        data: data.historical_data.map(d => d.price).reverse(),
+                        borderColor: 'gold',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        }
+
+        fetchPrediction();
+    </script>
+</body>
+</html>
