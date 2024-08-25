@@ -12,15 +12,18 @@ class RequestHandler(SimpleHTTPRequestHandler):
             data = json.loads(main())
             latest_price = data.get('latest_price', 'N/A')
             predictions = data.get('predictions', {})
+            advanced_predictions = data.get('advanced_predictions', {})
             portfolio_value = data.get('portfolio_value', 'N/A')
             recent_trades = data.get('recent_trades', [])
             balance = data.get('balance', 'N/A')
             gold_holdings = data.get('gold_holdings', 'N/A')
+            metrics = data.get('performance_metrics', {})
+            risk_assessment = data.get('risk_assessment', 'N/A')
             
             html_content = f"""
             <html>
             <head>
-                <title>Gold Price Predictor and Paper Trader</title>
+                <title>Advanced Gold Price Predictor and Paper Trader</title>
                 <meta http-equiv="refresh" content="60">
                 <style>
                     body {{ font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }}
@@ -32,12 +35,17 @@ class RequestHandler(SimpleHTTPRequestHandler):
                 </style>
             </head>
             <body>
-                <h1>Gold Price Predictor and Paper Trader</h1>
+                <h1>Advanced Gold Price Predictor and Paper Trader</h1>
                 <p>Current gold price: <span class="price">${latest_price}</span></p>
-                <h2>Predictions:</h2>
+                <h2>Simple Predictions:</h2>
                 <table>
                     <tr><th>Date</th><th>Predicted Price</th></tr>
                     {''.join(f"<tr><td>{date}</td><td>${price:.2f}</td></tr>" for date, price in predictions.items())}
+                </table>
+                <h2>Advanced Predictions:</h2>
+                <table>
+                    <tr><th>Date</th><th>Predicted Price</th></tr>
+                    {''.join(f"<tr><td>{date}</td><td>${price:.2f}</td></tr>" for date, price in advanced_predictions.items())}
                 </table>
                 <h2>Paper Trading Portfolio:</h2>
                 <p>Portfolio Value: ${portfolio_value:.2f}</p>
@@ -48,6 +56,13 @@ class RequestHandler(SimpleHTTPRequestHandler):
                     <tr><th>Date</th><th>Type</th><th>Price</th><th>Amount</th></tr>
                     {''.join(f"<tr><td>{trade['date']}</td><td>{trade['type']}</td><td>${trade['price']:.2f}</td><td>{trade['amount']:.4f} oz</td></tr>" for trade in recent_trades)}
                 </table>
+                <h2>Performance Metrics:</h2>
+                <table>
+                    <tr><th>Metric</th><th>Value</th></tr>
+                    {''.join(f"<tr><td>{metric}</td><td>{value}</td></tr>" for metric, value in metrics.items())}
+                </table>
+                <h2>Risk Assessment:</h2>
+                <p>{risk_assessment}</p>
             </body>
             </html>
             """

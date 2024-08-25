@@ -11,7 +11,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Install required Python packages
-pip install yfinance pandas numpy scipy statsmodels scikit-learn matplotlib
+pip install -r requirements.txt
 
 # Create a startup script
 cat > start.sh << EOL
