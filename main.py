@@ -2,29 +2,31 @@ import yaml
 import logging
 import argparse
 from typing import Dict, Any
-from src.data_fetcher import fetch_all_data
-from src.data_processor import prepare_data
-from src.model_trainer import train_model, load_model, save_model
-from src.predictor import make_predictions, evaluate_predictions, save_predictions
-from src.visualizer import plot_predictions, plot_feature_importance, plot_correlation_matrix
+from ultra_advanced_gold_predictor import (
+    fetch_all_data,
+    prepare_data,
+    train_model,
+    make_predictions,
+    evaluate_predictions,
+    save_predictions,
+    plot_predictions,
+    plot_feature_importance,
+    plot_correlation_matrix
+)
 
-class Config:
-    def __init__(self, config_dict: Dict[str, Any]):
-        self.__dict__.update(config_dict)
-
-def load_config(config_path: str) -> Config:
+def load_config(config_path: str) -> Dict[str, Any]:
     with open(config_path, 'r') as file:
-        return Config(yaml.safe_load(file))
+        return yaml.safe_load(file)
 
-def setup_logging(config: Config) -> None:
-    logging.basicConfig(filename=config.paths['logs'], level=logging.INFO,
+def setup_logging(config: Dict[str, Any]) -> None:
+    logging.basicConfig(filename=config['paths']['logs'], level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
 def main(config_path: str) -> None:
     config = load_config(config_path)
     setup_logging(config)
 
-    logging.info("Starting gold and forex prediction process")
+    logging.info("Starting gold prediction process")
 
     try:
         # Fetch data
@@ -36,15 +38,11 @@ def main(config_path: str) -> None:
         logging.info("Data prepared successfully")
 
         # Train model
-        model = train_model(X_train, y_train, config)
-        logging.info("Model trained successfully")
-
-        # Save model
-        save_model(model, config.paths['model'])
-        logging.info("Model saved successfully")
+        models = train_model(X_train, y_train, config)
+        logging.info("Models trained successfully")
 
         # Make predictions
-        predictions = make_predictions(model, X_test)
+        predictions = make_predictions(models, X_test)
         logging.info("Predictions made successfully")
 
         # Evaluate predictions
@@ -57,17 +55,17 @@ def main(config_path: str) -> None:
 
         # Visualize results
         plot_predictions(y_test, predictions, config)
-        plot_feature_importance(model, X_train.columns)
-        plot_correlation_matrix(data['Gold'].to_frame().join(data['Forex']))
+        plot_feature_importance(models['stacking_model'], X_train.columns)
+        plot_correlation_matrix(data['gold'].to_frame().join(data['economic']))
         logging.info("Visualizations created successfully")
 
     except Exception as e:
         logging.error(f"An error occurred: {str(e)}", exc_info=True)
     
-    logging.info("Gold and forex prediction process completed")
+    logging.info("Gold prediction process completed")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run gold and forex prediction process")
-    parser.add_argument("--config", default="config/config.yaml", help="Path to the configuration file")
+    parser = argparse.ArgumentParser(description="Run gold prediction process")
+    parser.add_argument("--config", default="config.yaml", help="Path to the configuration file")
     args = parser.parse_args()
     main(args.config)
