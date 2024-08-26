@@ -9,6 +9,10 @@ class FeatureEngineer:
         self.scaler = StandardScaler()
 
     def engineer_features(self, df):
+        # Check if 'volume' is present, if not, add a dummy column
+        if 'volume' not in df.columns:
+            df['volume'] = 1000  # dummy value
+
         # Add technical indicators
         df = add_all_ta_features(
             df, open="open", high="high", low="low", close="close", volume="volume"
