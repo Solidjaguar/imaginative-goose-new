@@ -1,37 +1,28 @@
-import pandas as pd
-from alpha_vantage.timeseries import TimeSeries
-from fredapi import Fred
-from src.utils.logger import app_logger
-from config import ALPHA_VANTAGE_API_KEY, FRED_API_KEY
+import requests
+from tenacity import retry, stop_after_attempt, wait_exponential
+from loguru import logger
 
 class DataFetcher:
-    def __init__(self):
-        self.av = TimeSeries(key=ALPHA_VANTAGE_API_KEY)
-        self.fred = Fred(api_key=FRED_API_KEY)
-
-    def fetch_forex_data(self, symbol='EUR/USD', interval='daily'):
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    def fetch_forex_data(self, symbol, interval):
         try:
-            data, _ = self.av.get_forex_daily(symbol, outputsize='full')
-            df = pd.DataFrame(data).T
-            df.index = pd.to_datetime(df.index)
-            df.columns = ['open', 'high', 'low', 'close']
-            df = df.astype(float)
-            app_logger.info(f"Successfully fetched forex data for {symbol}")
-            return df
-        except Exception as e:
-            app_logger.error(f"Error fetching forex data: {str(e)}")
+            url = f"https://api.example.com/forex?symbol={symbol}&interval={interval}"
+            response = requests.get(url)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"Error fetching forex data: {str(e)}")
             raise
 
-    def fetch_economic_indicator(self, indicator):
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    def fetch_economic_indicators(self):
         try:
-            data = self.fred.get_series(indicator)
-            app_logger.info(f"Successfully fetched economic indicator: {indicator}")
-            return data
-        except Exception as e:
-            app_logger.error(f"Error fetching economic indicator {indicator}: {str(e)}")
+            url = "https://api.example.com/economic_indicators"
+            response = requests.get(url)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"Error fetching economic indicators: {str(e)}")
             raise
 
-# Usage example:
-# fetcher = DataFetcher()
-# forex_data = fetcher.fetch_forex_data()
-# gdp_data = fetcher.fetch_economic_indicator('GDP')
+# Add more methods for other data sources as needed
