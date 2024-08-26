@@ -1,34 +1,45 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from src.utils.model_versioner import ModelVersioner
-from src.utils.logger import app_logger
+import pandas as pd
+import numpy as np
 
 app = FastAPI()
-
-model_versioner = ModelVersioner('models')
+model_versioner = ModelVersioner()
 
 class PredictionRequest(BaseModel):
+    features: dict
+
+class ModelInfo(BaseModel):
     model_name: str
-    features: list[float]
+    run_id: str = None
 
-class PredictionResponse(BaseModel):
-    prediction: float
-    model_version: int
-
-@app.post("/predict", response_model=PredictionResponse)
-async def predict(request: PredictionRequest):
+@app.post("/predict/{model_name}")
+async def predict(model_name: str, request: PredictionRequest):
     try:
-        model, model_info = model_versioner.load_latest_model(request.model_name)
-        prediction = model.predict([request.features])[0]
-        return PredictionResponse(prediction=prediction, model_version=model_info['version'])
+        model = model_versioner.load_model(model_name)
+        features = pd.DataFrame([request.features])
+        prediction = model.predict(features)
+        return {"prediction": float(prediction[0])}
     except Exception as e:
-        app_logger.error(f"Prediction error: {str(e)}")
-        raise
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/models")
-async def list_models():
-    return model_versioner.versions
+@app.get("/model_info/{model_name}")
+async def get_model_info(model_name: str):
+    try:
+        # This is a placeholder. You'll need to implement a method to get the latest run_id
+        run_id = "latest_run_id"  
+        return {"model_name": model_name, "run_id": run_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+@app.post("/retrain/{model_name}")
+async def retrain_model(model_name: str):
+    try:
+        # This is a placeholder. You'll need to implement the retraining logic
+        # It should fetch new data, retrain the model, and save it
+        return {"message": f"Model {model_name} retrained successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Add more endpoints as needed

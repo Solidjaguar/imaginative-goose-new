@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from ta import add_all_ta_features
 from sklearn.preprocessing import StandardScaler
+from scipy.stats import kurtosis, skew
 
 class FeatureEngineer:
     def __init__(self):
@@ -14,8 +15,11 @@ class FeatureEngineer:
         )
 
         # Add rolling statistics
-        df['rolling_mean'] = df['close'].rolling(window=14).mean()
-        df['rolling_std'] = df['close'].rolling(window=14).std()
+        for window in [7, 14, 30]:
+            df[f'rolling_mean_{window}'] = df['close'].rolling(window=window).mean()
+            df[f'rolling_std_{window}'] = df['close'].rolling(window=window).std()
+            df[f'rolling_min_{window}'] = df['close'].rolling(window=window).min()
+            df[f'rolling_max_{window}'] = df['close'].rolling(window=window).max()
 
         # Add lag features
         for lag in [1, 3, 5, 7, 14]:
@@ -31,6 +35,13 @@ class FeatureEngineer:
         fft_df['angle'] = fft_df['fft'].apply(lambda x: np.angle(x))
         df['fft_absolute'] = fft_df['absolute']
         df['fft_angle'] = fft_df['angle']
+
+        # Add statistical moments
+        df['kurtosis'] = df['close'].rolling(window=30).apply(kurtosis)
+        df['skew'] = df['close'].rolling(window=30).apply(skew)
+
+        # Add price change percentage
+        df['price_change_pct'] = df['close'].pct_change()
 
         # Handle missing values
         df = df.fillna(method='ffill').fillna(method='bfill')
