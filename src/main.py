@@ -1,53 +1,94 @@
-from src.utils.logger import app_logger
+import asyncio
+from fastapi import FastAPI
+from hypercorn.config import Config
+from hypercorn.asyncio import serve
+
 from src.utils.data_fetcher import DataFetcher
+from src.utils.feature_engineering import FeatureEngineer
+from src.utils.hyperparameter_tuning import HyperparameterTuner
 from src.models.model_trainer import ModelTrainer
 from src.utils.model_versioner import ModelVersioner
-from src.web.server import start_server
-from src.api.main import app as fastapi_app
-import uvicorn
-import threading
+from src.api.main import app as api_app
+from loguru import logger
 
-def run_fastapi():
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=8080)
+class MainApplication:
+    def __init__(self):
+        self.data_fetcher = DataFetcher()
+        self.feature_engineer = FeatureEngineer()
+        self.hyperparameter_tuner = HyperparameterTuner()
+        self.model_trainer = ModelTrainer()
+        self.model_versioner = ModelVersioner()
 
-def main():
-    app_logger.info("Starting the Forex and Gold Prediction System")
+    async def fetch_and_process_data(self):
+        try:
+            forex_data = self.data_fetcher.fetch_forex_data("EUR/USD", "1h")
+            economic_data = self.data_fetcher.fetch_economic_indicators()
+            
+            # Combine forex and economic data
+            combined_data = self.combine_data(forex_data, economic_data)
+            
+            # Engineer features
+            processed_data = self.feature_engineer.engineer_features(combined_data)
+            
+            return processed_data
+        except Exception as e:
+            logger.error(f"Error in data fetching and processing: {str(e)}")
+            raise
 
-    # Initialize components
-    data_fetcher = DataFetcher()
-    model_trainer = ModelTrainer()
-    model_versioner = ModelVersioner('models')
+    def combine_data(self, forex_data, economic_data):
+        # Implement logic to combine forex and economic data
+        # This is a placeholder and should be implemented based on your specific data structures
+        return forex_data  # For now, just return forex_data
 
-    try:
-        # Fetch data
-        app_logger.info("Fetching forex data")
-        forex_data = data_fetcher.fetch_forex_data()
-        
-        app_logger.info("Fetching economic indicators")
-        gdp_data = data_fetcher.fetch_economic_indicator('GDP')
-        inflation_data = data_fetcher.fetch_economic_indicator('CPIAUCSL')
+    async def train_and_version_models(self, data):
+        try:
+            X, y = self.prepare_data_for_training(data)
+            
+            # Tune hyperparameters
+            rf_params = self.hyperparameter_tuner.tune_random_forest(X, y)
+            lstm_params = self.hyperparameter_tuner.tune_lstm(X, y)
+            
+            # Train models with tuned hyperparameters
+            rf_model = self.model_trainer.train_random_forest(X, y, **rf_params)
+            lstm_model = self.model_trainer.train_lstm(X, y, **lstm_params)
+            
+            # Version models
+            self.model_versioner.save_model(rf_model, "random_forest")
+            self.model_versioner.save_model(lstm_model, "lstm")
+            
+            logger.info("Models trained and versioned successfully")
+        except Exception as e:
+            logger.error(f"Error in model training and versioning: {str(e)}")
+            raise
 
-        # Train models
-        app_logger.info("Training models")
-        random_forest_model = model_trainer.train_random_forest(forex_data, gdp_data, inflation_data)
-        lstm_model = model_trainer.train_lstm(forex_data, gdp_data, inflation_data)
+    def prepare_data_for_training(self, data):
+        # Implement logic to prepare data for training
+        # This is a placeholder and should be implemented based on your specific requirements
+        X = data.drop('target', axis=1)
+        y = data['target']
+        return X, y
 
-        # Save models with versioning
-        app_logger.info("Saving models")
-        rf_info = model_versioner.save_model(random_forest_model, 'RandomForest', {'accuracy': 0.85})
-        lstm_info = model_versioner.save_model(lstm_model, 'LSTM', {'accuracy': 0.87})
+    async def run(self):
+        while True:
+            try:
+                data = await self.fetch_and_process_data()
+                await self.train_and_version_models(data)
+                await asyncio.sleep(3600)  # Sleep for 1 hour
+            except Exception as e:
+                logger.error(f"Error in main loop: {str(e)}")
+                await asyncio.sleep(300)  # Sleep for 5 minutes before retrying
 
-        # Start the FastAPI server in a separate thread
-        app_logger.info("Starting FastAPI server")
-        fastapi_thread = threading.Thread(target=run_fastapi)
-        fastapi_thread.start()
+async def start_api():
+    config = Config()
+    config.bind = ["0.0.0.0:8080"]
+    await serve(api_app, config)
 
-        # Start the web server
-        app_logger.info("Starting web server")
-        start_server()
-
-    except Exception as e:
-        app_logger.error(f"An error occurred: {str(e)}")
+async def main():
+    main_app = MainApplication()
+    await asyncio.gather(
+        main_app.run(),
+        start_api()
+    )
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
