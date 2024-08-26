@@ -45,6 +45,22 @@ echo "OANDA_ACCOUNT_ID=your_account_id_here" >> .env
 # git clone https://github.com/yourusername/forex-gold-prediction.git
 # cd forex-gold-prediction
 
+# Install TensorFlow dependencies
+sudo apt-get install -y libhdf5-dev libc-ares-dev libeigen3-dev
+pip install h5py==3.1.0
+
+# Install system dependencies for TA-Lib
+sudo apt-get install -y build-essential
+wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+tar -xzf ta-lib-0.4.0-src.tar.gz
+cd ta-lib/
+./configure --prefix=/usr
+make
+sudo make install
+cd ..
+rm -rf ta-lib*
+pip install TA-Lib
+
 # Run tests
 python -m pytest tests/
 
